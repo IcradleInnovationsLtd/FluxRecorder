@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -35,13 +36,16 @@ fun RecordingsScreen(
 ) {
     var selectedVideoForPlayback by remember { mutableStateOf<Recording?>(null) }
 
-    // In-App Video Player Dialog
+    // In-App Video Player & Editor Dialog
     selectedVideoForPlayback?.let { recording ->
         VideoPlayerDialog(
             recording = recording,
             onDismiss = { selectedVideoForPlayback = null },
             onShare = onShareRecording,
-            onOpenExternal = onPlayRecording
+            onOpenExternal = onPlayRecording,
+            onTrimComplete = {
+                onRefresh?.invoke()
+            }
         )
     }
 
@@ -215,26 +219,37 @@ fun RecordingCard(
 
                 Spacer(Modifier.height(8.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = onPlay,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = FluxCyan)
+                    ) {
+                        Icon(Icons.Default.ContentCut, null, Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Edit", style = MaterialTheme.typography.labelMedium)
+                    }
+
                     OutlinedButton(
                         onClick = onShare,
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = FluxCyan)
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
                     ) {
-                        Icon(Icons.Default.Share, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.Share, null, Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
                         Text("Share", style = MaterialTheme.typography.labelMedium)
                     }
 
                     OutlinedButton(
                         onClick = { showDeleteDialog = true },
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = RecordingRed)
                     ) {
-                        Icon(Icons.Default.Delete, null, Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Default.Delete, null, Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
                         Text("Delete", style = MaterialTheme.typography.labelMedium)
                     }
                 }
