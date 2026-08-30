@@ -50,7 +50,7 @@ class PreferencesManager(context: Context) {
             shakeSensitivity      = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 12.0f).let {
                 if (it < 6.0f) 12.0f else it
             },
-            showFloatingControls = prefs.getBoolean(KEY_SHOW_FLOATING_CONTROLS, false)
+            showFloatingControls = prefs.getBoolean(KEY_SHOW_FLOATING_CONTROLS, true)
         )
     }
     

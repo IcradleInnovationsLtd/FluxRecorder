@@ -27,8 +27,8 @@ import com.flux.recorder.utils.PermissionManager
 import kotlin.math.abs
 
 /**
- * Service for managing the floating Facecam window and optional floating controls.
- * Floating controls can be completely hidden for 100% clean video recordings.
+ * Sleek, ultra-low-profile edge-docked floating control overlay with 20% idle transparency,
+ * smooth expansion, quick action buttons, and complete on-demand dismissal.
  */
 class FloatingControlService : Service() {
 
@@ -39,7 +39,7 @@ class FloatingControlService : Service() {
     private var isExpanded = false
     private var isPaused = false
     private var isFacecamActive = false
-    private var shouldShowControls = false // Default to clean recording with no floating buttons
+    private var shouldShowControls = true
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoCollapseRunnable = Runnable {
@@ -50,7 +50,8 @@ class FloatingControlService : Service() {
     }
     private val autoDimRunnable = Runnable {
         if (!isExpanded) {
-            controlOverlay?.animate()?.alpha(0.35f)?.setDuration(300)?.start()
+            // Smoothly fade to 20% opacity so it's virtually invisible during video/game recording
+            controlOverlay?.animate()?.alpha(0.20f)?.setDuration(350)?.start()
         }
     }
 
@@ -93,7 +94,7 @@ class FloatingControlService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
-            x = (12 * density).toInt()
+            x = if (isExpanded) (12 * density).toInt() else 0 // Dock directly to the screen edge when collapsed
             y = (140 * density).toInt()
         }
 
@@ -104,10 +105,10 @@ class FloatingControlService : Service() {
             mainHandler.removeCallbacks(autoCollapseRunnable)
             rootLayout.alpha = 1.0f
 
-            // Auto-collapse after 4 seconds of inactivity
-            mainHandler.postDelayed(autoCollapseRunnable, 4000)
+            // Auto-collapse after 3.5 seconds of inactivity
+            mainHandler.postDelayed(autoCollapseRunnable, 3500)
 
-            // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Complete-Hide buttons
+            // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Hide buttons
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding((6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt())
@@ -137,7 +138,7 @@ class FloatingControlService : Service() {
                     }
                     setOnClickListener {
                         mainHandler.removeCallbacks(autoCollapseRunnable)
-                        mainHandler.postDelayed(autoCollapseRunnable, 4000)
+                        mainHandler.postDelayed(autoCollapseRunnable, 3500)
                         onClick()
                     }
                 }
@@ -187,29 +188,37 @@ class FloatingControlService : Service() {
             }
             panel.addView(facecamButton)
 
-            // 4. Hide All Controls Completely button (removes overlay from screen entirely)
+            // 4. Hide / Minimize button
             val hideButton = createButton(
-                iconRes = R.drawable.ic_close_white,
+                iconRes = R.drawable.ic_minimize,
                 tintColor = Color.parseColor("#AAAAAA")
             ) {
-                hideControlsCompletely()
+                isExpanded = false
+                createOrUpdateControlOverlay()
             }
             panel.addView(hideButton)
 
             rootLayout.addView(panel)
 
         } else {
-            // Collapsed Bubble: 36dp circular badge
-            val bubbleSize = (36 * density).toInt()
+            // Collapsed: Ultra-compact edge-docked tab (30dp width, half-pill attached to bezel)
+            val tabWidth = (28 * density).toInt()
+            val tabHeight = (44 * density).toInt()
             val bubble = FrameLayout(this).apply {
-                layoutParams = FrameLayout.LayoutParams(bubbleSize, bubbleSize)
+                layoutParams = FrameLayout.LayoutParams(tabWidth, tabHeight)
                 val bg = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadii = floatArrayOf(
+                        14f * density, 14f * density, // top-left
+                        0f, 0f,                       // top-right (flush to screen edge)
+                        0f, 0f,                       // bottom-right (flush to screen edge)
+                        14f * density, 14f * density  // bottom-left
+                    )
                     setColor(Color.parseColor("#CC121212"))
-                    setStroke((1.5f * density).toInt(), Color.parseColor("#00E5FF"))
+                    setStroke((1.2f * density).toInt(), Color.parseColor("#00E5FF"))
                 }
                 background = bg
-                elevation = 12f
+                elevation = 8f
                 setOnClickListener {
                     isExpanded = true
                     createOrUpdateControlOverlay()
@@ -218,9 +227,9 @@ class FloatingControlService : Service() {
 
             val icon = ImageButton(this).apply {
                 setImageResource(R.drawable.ic_record)
-                setColorFilter(Color.parseColor("#FF3B30"))
+                setColorFilter(Color.parseColor("#00E5FF"))
                 background = null
-                setPadding((6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt())
+                setPadding((4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
                 layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                 setOnClickListener {
                     isExpanded = true
@@ -230,12 +239,12 @@ class FloatingControlService : Service() {
             bubble.addView(icon)
             rootLayout.addView(bubble)
 
-            // Auto-dim bubble after 2.5 seconds
+            // Auto-dim to 20% opacity after 2 seconds
             mainHandler.removeCallbacks(autoDimRunnable)
-            mainHandler.postDelayed(autoDimRunnable, 2500)
+            mainHandler.postDelayed(autoDimRunnable, 2000)
         }
 
-        // Drag support for the root layout
+        // Drag support for repositioning
         rootLayout.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
@@ -273,9 +282,9 @@ class FloatingControlService : Service() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (!isExpanded) {
-                            mainHandler.postDelayed(autoDimRunnable, 2500)
+                            mainHandler.postDelayed(autoDimRunnable, 2000)
                         } else {
-                            mainHandler.postDelayed(autoCollapseRunnable, 4000)
+                            mainHandler.postDelayed(autoCollapseRunnable, 3500)
                         }
                     }
                 }
@@ -309,7 +318,7 @@ class FloatingControlService : Service() {
         shouldShowControls = false
         removeControlOverlay()
         Toast.makeText(this, "Controls hidden. Use Notification bar or Shake to Stop.", Toast.LENGTH_SHORT).show()
-        Log.d(TAG, "Floating controls completely hidden for 100% clean recording")
+        Log.d(TAG, "Floating controls completely hidden for clean recording")
     }
 
     private fun toggleFacecam() {
@@ -369,7 +378,7 @@ class FloatingControlService : Service() {
         }
 
         val enableCamera = intent?.getBooleanExtra(EXTRA_ENABLE_CAMERA, false) ?: false
-        shouldShowControls = intent?.getBooleanExtra(EXTRA_SHOW_CONTROLS, false) ?: false
+        shouldShowControls = intent?.getBooleanExtra(EXTRA_SHOW_CONTROLS, true) ?: true
 
         if (shouldShowControls && PermissionManager.hasOverlayPermission(this)) {
             createOrUpdateControlOverlay()
