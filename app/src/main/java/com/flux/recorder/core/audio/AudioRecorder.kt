@@ -13,7 +13,7 @@ import com.flux.recorder.data.AudioSource
 
 /**
  * Handles Audio capture (Mic, System Internal, or Both)
- * Supports mixing multiple audio sources when BOTH mode is selected
+ * Supports zero-allocation high-performance audio mixing for minimal CPU and battery usage.
  */
 class AudioRecorder {
     
@@ -22,6 +22,10 @@ class AudioRecorder {
     private var bufferSize = 0
     private var isRecording = false
     private var currentAudioSource: AudioSource = AudioSource.NONE
+
+    // Zero-allocation reusable buffers for audio mixing
+    private var reusableMicBuffer: ByteArray? = null
+    private var reusableInternalBuffer: ByteArray? = null
     
     companion object {
         private const val TAG = "AudioRecorder"
@@ -45,6 +49,8 @@ class AudioRecorder {
         }
         
         bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT) * 2
+        reusableMicBuffer = ByteArray(bufferSize)
+        reusableInternalBuffer = ByteArray(bufferSize)
         
         var micSuccess = false
         var internalSuccess = false
@@ -158,15 +164,16 @@ class AudioRecorder {
     }
     
     /**
-     * Mix audio from both microphone and internal sources
+     * Mix audio from both microphone and internal sources with ZERO memory allocations
      * Uses 50% gain for each source to prevent clipping
      */
     private fun mixAudioSources(outputBuffer: ByteArray, size: Int): Int {
-        val micBuffer = ByteArray(size)
-        val internalBuffer = ByteArray(size)
+        val micBuf = reusableMicBuffer ?: ByteArray(size).also { reusableMicBuffer = it }
+        val internalBuf = reusableInternalBuffer ?: ByteArray(size).also { reusableInternalBuffer = it }
+        val readSize = minOf(size, micBuf.size, internalBuf.size)
         
-        val micRead = micRecorder?.read(micBuffer, 0, size) ?: 0
-        val internalRead = internalRecorder?.read(internalBuffer, 0, size) ?: 0
+        val micRead = micRecorder?.read(micBuf, 0, readSize) ?: 0
+        val internalRead = internalRecorder?.read(internalBuf, 0, readSize) ?: 0
         
         // If neither source has data, return -1
         if (micRead <= 0 && internalRead <= 0) {
@@ -180,13 +187,13 @@ class AudioRecorder {
         for (i in 0 until maxRead step 2) {
             // Read 16-bit samples (little-endian). Guard i+1 to avoid OOB on odd-length reads.
             val micSample: Short = if (i + 1 < micRead) {
-                ((micBuffer[i + 1].toInt() shl 8) or (micBuffer[i].toInt() and 0xFF)).toShort()
+                ((micBuf[i + 1].toInt() shl 8) or (micBuf[i].toInt() and 0xFF)).toShort()
             } else {
                 0
             }
 
             val internalSample: Short = if (i + 1 < internalRead) {
-                ((internalBuffer[i + 1].toInt() shl 8) or (internalBuffer[i].toInt() and 0xFF)).toShort()
+                ((internalBuf[i + 1].toInt() shl 8) or (internalBuf[i].toInt() and 0xFF)).toShort()
             } else {
                 0
             }
@@ -227,6 +234,8 @@ class AudioRecorder {
             Log.e(TAG, "Error stopping internal recorder", e)
         }
         
-        Log.d(TAG, "AudioRecorder stopped")
+        reusableMicBuffer = null
+        reusableInternalBuffer = null
+        Log.d(TAG, "AudioRecorder stopped and buffers released")
     }
 }
