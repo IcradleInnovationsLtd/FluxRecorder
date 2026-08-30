@@ -34,8 +34,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.flux.recorder.core.editor.CropAspectRatio
 import com.flux.recorder.core.editor.VideoCropper
@@ -48,8 +50,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * High-performance In-App Video Player with integrated Touch-Draggable Spatial Cropping & Temporal Trimming.
- * Powered by AndroidX Media3 ExoPlayer, Media3 Transformer, and OpenGL FrameProcessor.
+ * Production-ready In-App Video Player & Touch-Draggable Video Cropper / Trimmer.
+ * Zero letterbox distortion: The crop frame aligns pixel-for-pixel with the hardware video surface.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -78,6 +80,9 @@ fun VideoPlayerDialog(
     var currentPositionMs by remember { mutableLongStateOf(0L) }
     var totalDurationMs by remember { mutableLongStateOf(recording.durationMs.coerceAtLeast(1000L)) }
 
+    // Video aspect ratio state from decoder
+    var videoAspectRatio by remember { mutableFloatStateOf(9f / 16f) }
+
     // Trimmer State
     var trimStartMs by remember { mutableLongStateOf(0L) }
     var trimEndMs by remember { mutableLongStateOf(recording.durationMs.coerceAtLeast(1000L)) }
@@ -92,7 +97,7 @@ fun VideoPlayerDialog(
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableFloatStateOf(0f) }
 
-    // Track real playback duration and position
+    // Track real playback duration, position, and video dimensions
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
@@ -104,6 +109,15 @@ fun VideoPlayerDialog(
                             trimEndMs = realDuration
                         }
                     }
+                }
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    val rot = videoSize.unappliedRotationDegrees
+                    val effWidth = if (rot == 90 || rot == 270) videoSize.height else videoSize.width
+                    val effHeight = if (rot == 90 || rot == 270) videoSize.width else videoSize.height
+                    videoAspectRatio = effWidth.toFloat() / effHeight.toFloat()
                 }
             }
         }
@@ -132,6 +146,36 @@ fun VideoPlayerDialog(
     }
 
     val isSpatialCropActive = cropLeft > 0.01f || cropTop > 0.01f || cropRight < 0.99f || cropBottom < 0.99f || selectedAspectRatio != CropAspectRatio.ORIGINAL
+
+    // Helper to calculate centered crop bounds for a target aspect ratio given current videoAspectRatio
+    fun applyPresetRatio(targetRatio: Float?) {
+        if (targetRatio == null) {
+            cropLeft = 0f
+            cropTop = 0f
+            cropRight = 1f
+            cropBottom = 1f
+            return
+        }
+
+        val videoRatio = videoAspectRatio.coerceAtLeast(0.1f)
+        if (targetRatio > videoRatio) {
+            // Target is wider than video: keep width full, crop top & bottom
+            val desiredHeightNorm = videoRatio / targetRatio
+            val verticalInset = (1f - desiredHeightNorm) / 2f
+            cropLeft = 0f
+            cropRight = 1f
+            cropTop = verticalInset.coerceIn(0f, 0.45f)
+            cropBottom = (1f - verticalInset).coerceIn(0.55f, 1f)
+        } else {
+            // Target is narrower than video: keep height full, crop left & right
+            val desiredWidthNorm = targetRatio / videoRatio
+            val horizontalInset = (1f - desiredWidthNorm) / 2f
+            cropTop = 0f
+            cropBottom = 1f
+            cropLeft = horizontalInset.coerceIn(0f, 0.45f)
+            cropRight = (1f - horizontalInset).coerceIn(0.55f, 1f)
+        }
+    }
 
     Dialog(
         onDismissRequest = {
@@ -210,7 +254,7 @@ fun VideoPlayerDialog(
                     }
                 }
 
-                // Video Surface with Interactive Draggable/Resizable Crop Overlay
+                // Video Surface: EXACT VIDEO BOUNDARY CONTAINER (No letterbox skew)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -220,202 +264,213 @@ fun VideoPlayerDialog(
                         .background(SurfaceBlack),
                     contentAlignment = Alignment.Center
                 ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                player = exoPlayer
-                                useController = true
-                                layoutParams = FrameLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    // Interactive Draggable Crop Overlay
-                    if (isEditorMode && (selectedEditorTab == 1 || isSpatialCropActive)) {
-                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                            val containerWidthPx = constraints.maxWidth.toFloat()
-                            val containerHeightPx = constraints.maxHeight.toFloat()
-
-                            val boxLeftPx = (cropLeft * containerWidthPx)
-                            val boxTopPx = (cropTop * containerHeightPx)
-                            val boxWidthPx = ((cropRight - cropLeft) * containerWidthPx).coerceAtLeast(40f)
-                            val boxHeightPx = ((cropBottom - cropTop) * containerHeightPx).coerceAtLeast(40f)
-
-                            // Outer dark mask
-                            // Top mask
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height((cropTop * maxHeight.value).dp)
-                                    .background(Color.Black.copy(alpha = 0.55f))
-                                    .align(Alignment.TopStart)
-                            )
-                            // Bottom mask
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(((1f - cropBottom) * maxHeight.value).dp)
-                                    .background(Color.Black.copy(alpha = 0.55f))
-                                    .align(Alignment.BottomStart)
-                            )
-                            // Left mask
-                            Box(
-                                modifier = Modifier
-                                    .width((cropLeft * maxWidth.value).dp)
-                                    .fillMaxHeight()
-                                    .background(Color.Black.copy(alpha = 0.55f))
-                                    .align(Alignment.TopStart)
-                            )
-                            // Right mask
-                            Box(
-                                modifier = Modifier
-                                    .width(((1f - cropRight) * maxWidth.value).dp)
-                                    .fillMaxHeight()
-                                    .background(Color.Black.copy(alpha = 0.55f))
-                                    .align(Alignment.TopEnd)
-                            )
-
-                            // The Active Crop Box (Draggable Body)
-                            Box(
-                                modifier = Modifier
-                                    .offset { IntOffset(boxLeftPx.roundToInt(), boxTopPx.roundToInt()) }
-                                    .size(
-                                        width = (boxWidthPx / containerWidthPx * maxWidth.value).dp,
-                                        height = (boxHeightPx / containerHeightPx * maxHeight.value).dp
+                    // Exact Aspect Ratio Container that fits within available space
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(videoAspectRatio, matchHeightConstraintsFirst = true)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AndroidView(
+                            factory = { ctx ->
+                                PlayerView(ctx).apply {
+                                    player = exoPlayer
+                                    useController = true
+                                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                    layoutParams = FrameLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT,
+                                        ViewGroup.LayoutParams.MATCH_PARENT
                                     )
-                                    .border(2.dp, FluxCyan, RoundedCornerShape(4.dp))
-                                    .background(FluxCyan.copy(alpha = 0.05f))
-                                    .pointerInput(Unit) {
-                                        detectDragGestures { change, dragAmount ->
-                                            change.consume()
-                                            val deltaXNorm = dragAmount.x / containerWidthPx
-                                            val deltaYNorm = dragAmount.y / containerHeightPx
-
-                                            val currentWidthNorm = cropRight - cropLeft
-                                            val currentHeightNorm = cropBottom - cropTop
-
-                                            val newLeft = (cropLeft + deltaXNorm).coerceIn(0f, 1f - currentWidthNorm)
-                                            val newTop = (cropTop + deltaYNorm).coerceIn(0f, 1f - currentHeightNorm)
-
-                                            cropLeft = newLeft
-                                            cropRight = newLeft + currentWidthNorm
-                                            cropTop = newTop
-                                            cropBottom = newTop + currentHeightNorm
-                                        }
-                                    }
-                            ) {
-                                // Rule of thirds grid lines
-                                Column(modifier = Modifier.fillMaxSize()) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
-                                    Spacer(modifier = Modifier.weight(1f))
                                 }
-                                Row(modifier = Modifier.fillMaxSize()) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
 
-                                // Aspect ratio / drag label badge
-                                Text(
-                                    text = "✋ Drag to move • ${selectedAspectRatio.displayName}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VoidBlack,
-                                    fontSize = 10.sp,
+                        // Interactive 1:1 Pixel-Perfect Draggable Crop Overlay
+                        if (isEditorMode && (selectedEditorTab == 1 || isSpatialCropActive)) {
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                val containerWidthPx = constraints.maxWidth.toFloat()
+                                val containerHeightPx = constraints.maxHeight.toFloat()
+
+                                val boxLeftPx = (cropLeft * containerWidthPx)
+                                val boxTopPx = (cropTop * containerHeightPx)
+                                val boxWidthPx = ((cropRight - cropLeft) * containerWidthPx).coerceAtLeast(30f)
+                                val boxHeightPx = ((cropBottom - cropTop) * containerHeightPx).coerceAtLeast(30f)
+
+                                // Darkened surrounding masks
+                                // Top
+                                Box(
                                     modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height((cropTop * maxHeight.value).dp)
+                                        .background(Color.Black.copy(alpha = 0.60f))
                                         .align(Alignment.TopStart)
-                                        .background(FluxCyan, RoundedCornerShape(bottomEnd = 6.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
-
-                                // 4 Corner Resize Handles
-                                // Top-Left Handle
+                                // Bottom
                                 Box(
                                     modifier = Modifier
-                                        .size(24.dp)
-                                        .align(Alignment.TopStart)
-                                        .offset((-8).dp, (-8).dp)
-                                        .background(FluxCyan, CircleShape)
-                                        .border(2.dp, VoidBlack, CircleShape)
-                                        .pointerInput(Unit) {
-                                            detectDragGestures { change, dragAmount ->
-                                                change.consume()
-                                                val deltaX = dragAmount.x / containerWidthPx
-                                                val deltaY = dragAmount.y / containerHeightPx
-                                                cropLeft = (cropLeft + deltaX).coerceIn(0f, cropRight - 0.15f)
-                                                cropTop = (cropTop + deltaY).coerceIn(0f, cropBottom - 0.15f)
-                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
-                                            }
-                                        }
-                                )
-
-                                // Top-Right Handle
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .align(Alignment.TopEnd)
-                                        .offset(8.dp, (-8).dp)
-                                        .background(FluxCyan, CircleShape)
-                                        .border(2.dp, VoidBlack, CircleShape)
-                                        .pointerInput(Unit) {
-                                            detectDragGestures { change, dragAmount ->
-                                                change.consume()
-                                                val deltaX = dragAmount.x / containerWidthPx
-                                                val deltaY = dragAmount.y / containerHeightPx
-                                                cropRight = (cropRight + deltaX).coerceIn(cropLeft + 0.15f, 1f)
-                                                cropTop = (cropTop + deltaY).coerceIn(0f, cropBottom - 0.15f)
-                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
-                                            }
-                                        }
-                                )
-
-                                // Bottom-Left Handle
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
+                                        .fillMaxWidth()
+                                        .height(((1f - cropBottom) * maxHeight.value).dp)
+                                        .background(Color.Black.copy(alpha = 0.60f))
                                         .align(Alignment.BottomStart)
-                                        .offset((-8).dp, 8.dp)
-                                        .background(FluxCyan, CircleShape)
-                                        .border(2.dp, VoidBlack, CircleShape)
-                                        .pointerInput(Unit) {
-                                            detectDragGestures { change, dragAmount ->
-                                                change.consume()
-                                                val deltaX = dragAmount.x / containerWidthPx
-                                                val deltaY = dragAmount.y / containerHeightPx
-                                                cropLeft = (cropLeft + deltaX).coerceIn(0f, cropRight - 0.15f)
-                                                cropBottom = (cropBottom + deltaY).coerceIn(cropTop + 0.15f, 1f)
-                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
-                                            }
-                                        }
                                 )
-
-                                // Bottom-Right Handle
+                                // Left
                                 Box(
                                     modifier = Modifier
-                                        .size(24.dp)
-                                        .align(Alignment.BottomEnd)
-                                        .offset(8.dp, 8.dp)
-                                        .background(FluxCyan, CircleShape)
-                                        .border(2.dp, VoidBlack, CircleShape)
+                                        .width((cropLeft * maxWidth.value).dp)
+                                        .fillMaxHeight()
+                                        .background(Color.Black.copy(alpha = 0.60f))
+                                        .align(Alignment.TopStart)
+                                )
+                                // Right
+                                Box(
+                                    modifier = Modifier
+                                        .width(((1f - cropRight) * maxWidth.value).dp)
+                                        .fillMaxHeight()
+                                        .background(Color.Black.copy(alpha = 0.60f))
+                                        .align(Alignment.TopEnd)
+                                )
+
+                                // Active Draggable & Resizable Crop Frame
+                                Box(
+                                    modifier = Modifier
+                                        .offset { IntOffset(boxLeftPx.roundToInt(), boxTopPx.roundToInt()) }
+                                        .size(
+                                            width = (boxWidthPx / containerWidthPx * maxWidth.value).dp,
+                                            height = (boxHeightPx / containerHeightPx * maxHeight.value).dp
+                                        )
+                                        .border(2.dp, FluxCyan, RoundedCornerShape(4.dp))
+                                        .background(FluxCyan.copy(alpha = 0.05f))
                                         .pointerInput(Unit) {
                                             detectDragGestures { change, dragAmount ->
                                                 change.consume()
-                                                val deltaX = dragAmount.x / containerWidthPx
-                                                val deltaY = dragAmount.y / containerHeightPx
-                                                cropRight = (cropRight + deltaX).coerceIn(cropLeft + 0.15f, 1f)
-                                                cropBottom = (cropBottom + deltaY).coerceIn(cropTop + 0.15f, 1f)
-                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                                val deltaXNorm = dragAmount.x / containerWidthPx
+                                                val deltaYNorm = dragAmount.y / containerHeightPx
+
+                                                val currentWidthNorm = cropRight - cropLeft
+                                                val currentHeightNorm = cropBottom - cropTop
+
+                                                val newLeft = (cropLeft + deltaXNorm).coerceIn(0f, 1f - currentWidthNorm)
+                                                val newTop = (cropTop + deltaYNorm).coerceIn(0f, 1f - currentHeightNorm)
+
+                                                cropLeft = newLeft
+                                                cropRight = newLeft + currentWidthNorm
+                                                cropTop = newTop
+                                                cropBottom = newTop + currentHeightNorm
                                             }
                                         }
-                                )
+                                ) {
+                                    // Rule of thirds grid
+                                    Column(modifier = Modifier.fillMaxSize()) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                    Row(modifier = Modifier.fillMaxSize()) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                        Spacer(modifier = Modifier.weight(1f))
+                                        Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+
+                                    // Badge
+                                    Text(
+                                        text = "✋ Drag to move • ${selectedAspectRatio.displayName}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = VoidBlack,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier
+                                            .align(Alignment.TopStart)
+                                            .background(FluxCyan, RoundedCornerShape(bottomEnd = 6.dp))
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                    )
+
+                                    // 4 Corner Handles
+                                    // Top-Left
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .align(Alignment.TopStart)
+                                            .offset((-8).dp, (-8).dp)
+                                            .background(FluxCyan, CircleShape)
+                                            .border(2.dp, VoidBlack, CircleShape)
+                                            .pointerInput(Unit) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val deltaX = dragAmount.x / containerWidthPx
+                                                    val deltaY = dragAmount.y / containerHeightPx
+                                                    cropLeft = (cropLeft + deltaX).coerceIn(0f, cropRight - 0.15f)
+                                                    cropTop = (cropTop + deltaY).coerceIn(0f, cropBottom - 0.15f)
+                                                    selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                                }
+                                            }
+                                    )
+
+                                    // Top-Right
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .align(Alignment.TopEnd)
+                                            .offset(8.dp, (-8).dp)
+                                            .background(FluxCyan, CircleShape)
+                                            .border(2.dp, VoidBlack, CircleShape)
+                                            .pointerInput(Unit) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val deltaX = dragAmount.x / containerWidthPx
+                                                    val deltaY = dragAmount.y / containerHeightPx
+                                                    cropRight = (cropRight + deltaX).coerceIn(cropLeft + 0.15f, 1f)
+                                                    cropTop = (cropTop + deltaY).coerceIn(0f, cropBottom - 0.15f)
+                                                    selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                                }
+                                            }
+                                    )
+
+                                    // Bottom-Left
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .align(Alignment.BottomStart)
+                                            .offset((-8).dp, 8.dp)
+                                            .background(FluxCyan, CircleShape)
+                                            .border(2.dp, VoidBlack, CircleShape)
+                                            .pointerInput(Unit) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val deltaX = dragAmount.x / containerWidthPx
+                                                    val deltaY = dragAmount.y / containerHeightPx
+                                                    cropLeft = (cropLeft + deltaX).coerceIn(0f, cropRight - 0.15f)
+                                                    cropBottom = (cropBottom + deltaY).coerceIn(cropTop + 0.15f, 1f)
+                                                    selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                                }
+                                            }
+                                    )
+
+                                    // Bottom-Right
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .align(Alignment.BottomEnd)
+                                            .offset(8.dp, 8.dp)
+                                            .background(FluxCyan, CircleShape)
+                                            .border(2.dp, VoidBlack, CircleShape)
+                                            .pointerInput(Unit) {
+                                                detectDragGestures { change, dragAmount ->
+                                                    change.consume()
+                                                    val deltaX = dragAmount.x / containerWidthPx
+                                                    val deltaY = dragAmount.y / containerHeightPx
+                                                    cropRight = (cropRight + deltaX).coerceIn(cropLeft + 0.15f, 1f)
+                                                    cropBottom = (cropBottom + deltaY).coerceIn(cropTop + 0.15f, 1f)
+                                                    selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                                }
+                                            }
+                                    )
+                                }
                             }
                         }
                     }
@@ -582,11 +637,8 @@ fun VideoPlayerDialog(
                                     Text("Aspect Ratio Presets:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                                     TextButton(
                                         onClick = {
-                                            cropLeft = 0f
-                                            cropTop = 0f
-                                            cropRight = 1f
-                                            cropBottom = 1f
                                             selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                            applyPresetRatio(null)
                                         },
                                         contentPadding = PaddingValues(0.dp)
                                     ) {
@@ -605,38 +657,7 @@ fun VideoPlayerDialog(
                                             color = if (isSelected) FluxCyan else CardBlack,
                                             modifier = Modifier.clickable {
                                                 selectedAspectRatio = preset
-                                                when (preset) {
-                                                    CropAspectRatio.ORIGINAL -> {
-                                                        cropLeft = 0f
-                                                        cropTop = 0f
-                                                        cropRight = 1f
-                                                        cropBottom = 1f
-                                                    }
-                                                    CropAspectRatio.RATIO_1_1 -> {
-                                                        cropLeft = 0.15f
-                                                        cropRight = 0.85f
-                                                        cropTop = 0.10f
-                                                        cropBottom = 0.80f
-                                                    }
-                                                    CropAspectRatio.RATIO_9_16 -> {
-                                                        cropLeft = 0.12f
-                                                        cropRight = 0.88f
-                                                        cropTop = 0f
-                                                        cropBottom = 1f
-                                                    }
-                                                    CropAspectRatio.RATIO_16_9 -> {
-                                                        cropLeft = 0f
-                                                        cropRight = 1f
-                                                        cropTop = 0.20f
-                                                        cropBottom = 0.80f
-                                                    }
-                                                    CropAspectRatio.RATIO_4_5 -> {
-                                                        cropLeft = 0.10f
-                                                        cropRight = 0.90f
-                                                        cropTop = 0.05f
-                                                        cropBottom = 0.95f
-                                                    }
-                                                }
+                                                applyPresetRatio(preset.ratio)
                                             }
                                         ) {
                                             Text(
@@ -652,7 +673,7 @@ fun VideoPlayerDialog(
 
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    "💡 Tip: Touch & drag the frame on the video to move it, or drag the cyan circular corner handles to freely resize!",
+                                    "💡 Touch & drag the frame on the video to move it, or drag the cyan circular corner handles to freely resize!",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = FluxCyan,
                                     fontSize = 11.sp

@@ -1,6 +1,7 @@
 package com.flux.recorder.core.editor
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.util.Log
@@ -10,6 +11,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.Crop
 import androidx.media3.effect.DefaultVideoFrameProcessor
+import androidx.media3.effect.Presentation
 import androidx.media3.transformer.*
 import com.flux.recorder.utils.FileManager
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +35,7 @@ enum class CropAspectRatio(val displayName: String, val ratio: Float?) {
 
 /**
  * High-performance, hardware-accelerated Spatial Video Cropper & Trimmer.
- * Powered by AndroidX Media3 Transformer and OpenGL ES FrameProcessor.
+ * Powered by AndroidX Media3 Transformer, OpenGL ES FrameProcessor, and Hardware MediaCodec.
  */
 @OptIn(UnstableApi::class)
 object VideoCropper {
@@ -41,7 +43,7 @@ object VideoCropper {
     private const val TAG = "VideoCropper"
 
     /**
-     * Crop and trim a video with hardware acceleration.
+     * Crop and trim a video with hardware acceleration and automatic encoder fallback.
      * @param context Android Context
      * @param sourceUri Video source Uri
      * @param cropLeft Normalized left bound (0.0 to 1.0)
@@ -72,7 +74,34 @@ object VideoCropper {
             Log.d(TAG, "Starting crop: [L=$cropLeft, T=$cropTop, R=$cropRight, B=$cropBottom], time: ${startMs}ms - ${endMs}ms")
             onProgress(0.05f)
 
-            // Convert normalized (0..1) coordinates to OpenGL NDC coordinates (-1..1)
+            // 1. Inspect source video dimensions and rotation
+            var sourceWidth = 1080
+            var sourceHeight = 1920
+            var rotation = 0
+
+            try {
+                val pfd = context.contentResolver.openFileDescriptor(sourceUri, "r")
+                pfd?.use {
+                    val retriever = MediaMetadataRetriever()
+                    retriever.setDataSource(it.fileDescriptor)
+                    val rotStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                    rotation = rotStr?.toIntOrNull() ?: 0
+                    val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 1080
+                    val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 1920
+                    if (rotation == 90 || rotation == 270) {
+                        sourceWidth = h
+                        sourceHeight = w
+                    } else {
+                        sourceWidth = w
+                        sourceHeight = h
+                    }
+                    retriever.release()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not extract video metadata, using defaults", e)
+            }
+
+            // 2. Convert normalized (0..1) coordinates to OpenGL NDC coordinates (-1..1)
             // Left/Right: 0 -> -1, 1 -> +1
             // Top/Bottom: 0 -> +1 (top), 1 -> -1 (bottom)
             val glLeft = (cropLeft * 2f - 1f).coerceIn(-1f, 1f)
@@ -81,6 +110,14 @@ object VideoCropper {
             val glBottom = (1f - cropBottom * 2f).coerceIn(-1f, 1f)
 
             val isFullCrop = cropLeft <= 0.01f && cropTop <= 0.01f && cropRight >= 0.99f && cropBottom >= 0.99f
+
+            // Calculate even target output resolution for encoder compliance
+            val rawCropWidth = ((cropRight - cropLeft) * sourceWidth).toInt()
+            val rawCropHeight = ((cropBottom - cropTop) * sourceHeight).toInt()
+            val evenWidth = (rawCropWidth / 2 * 2).coerceAtLeast(160)
+            val evenHeight = (rawCropHeight / 2 * 2).coerceAtLeast(160)
+
+            Log.d(TAG, "Cropped target resolution: ${evenWidth}x${evenHeight} (source: ${sourceWidth}x${sourceHeight})")
 
             val mediaItemBuilder = MediaItem.Builder()
                 .setUri(sourceUri)
@@ -96,7 +133,10 @@ object VideoCropper {
 
             val effectsList = mutableListOf<Effect>()
             if (!isFullCrop) {
+                // Apply spatial crop
                 effectsList.add(Crop(glLeft, glRight, glBottom, glTop))
+                // Ensure output container resolution fits the cropped aspect ratio cleanly
+                effectsList.add(Presentation.createForWidthAndHeight(evenWidth, evenHeight, Presentation.LAYOUT_SCALE_TO_FIT))
             }
 
             val editedMediaItem = EditedMediaItem.Builder(mediaItem)
@@ -135,6 +175,7 @@ object VideoCropper {
 
                 transformer = Transformer.Builder(context)
                     .setVideoFrameProcessorFactory(DefaultVideoFrameProcessor.Factory.Builder().build())
+                    .setEncoderFactory(DefaultEncoderFactory.Builder(context).setEnableFallback(true).build())
                     .addListener(listener)
                     .build()
 
