@@ -8,9 +8,11 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -21,8 +23,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -41,9 +45,10 @@ import com.flux.recorder.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
- * High-performance In-App Video Player with integrated Spatial Cropping & Temporal Trimming.
+ * High-performance In-App Video Player with integrated Touch-Draggable Spatial Cropping & Temporal Trimming.
  * Powered by AndroidX Media3 ExoPlayer, Media3 Transformer, and OpenGL FrameProcessor.
  */
 @OptIn(UnstableApi::class)
@@ -77,10 +82,12 @@ fun VideoPlayerDialog(
     var trimStartMs by remember { mutableLongStateOf(0L) }
     var trimEndMs by remember { mutableLongStateOf(recording.durationMs.coerceAtLeast(1000L)) }
 
-    // Cropper State
+    // Normalized Draggable Crop Box State (0.0 to 1.0)
+    var cropLeft by remember { mutableFloatStateOf(0.0f) }
+    var cropTop by remember { mutableFloatStateOf(0.0f) }
+    var cropRight by remember { mutableFloatStateOf(1.0f) }
+    var cropBottom by remember { mutableFloatStateOf(1.0f) }
     var selectedAspectRatio by remember { mutableStateOf(CropAspectRatio.ORIGINAL) }
-    var cropHorizontalInset by remember { mutableFloatStateOf(0f) } // 0.0 to 0.45
-    var cropVerticalInset by remember { mutableFloatStateOf(0f) }   // 0.0 to 0.45
 
     var isExporting by remember { mutableStateOf(false) }
     var exportProgress by remember { mutableFloatStateOf(0f) }
@@ -124,12 +131,7 @@ fun VideoPlayerDialog(
         return String.format("%02d:%02d.%d", minutes, seconds, millis)
     }
 
-    // Calculate normalized crop bounds (0.0 to 1.0)
-    val cropLeft = (cropHorizontalInset).coerceIn(0f, 0.48f)
-    val cropRight = (1f - cropHorizontalInset).coerceIn(0.52f, 1f)
-    val cropTop = (cropVerticalInset).coerceIn(0f, 0.48f)
-    val cropBottom = (1f - cropVerticalInset).coerceIn(0.52f, 1f)
-    val isSpatialCropActive = cropHorizontalInset > 0.01f || cropVerticalInset > 0.01f || selectedAspectRatio != CropAspectRatio.ORIGINAL
+    val isSpatialCropActive = cropLeft > 0.01f || cropTop > 0.01f || cropRight < 0.99f || cropBottom < 0.99f || selectedAspectRatio != CropAspectRatio.ORIGINAL
 
     Dialog(
         onDismissRequest = {
@@ -208,11 +210,11 @@ fun VideoPlayerDialog(
                     }
                 }
 
-                // Video Surface with Spatial Crop Overlay Guide
+                // Video Surface with Interactive Draggable/Resizable Crop Overlay
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(if (isEditorMode) 0.52f else 1f)
+                        .weight(if (isEditorMode) 0.50f else 1f)
                         .padding(horizontal = 12.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(SurfaceBlack),
@@ -232,29 +234,189 @@ fun VideoPlayerDialog(
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Visual Crop Box Guide Overlay (Shown when in Editor Crop Tab)
+                    // Interactive Draggable Crop Overlay
                     if (isEditorMode && (selectedEditorTab == 1 || isSpatialCropActive)) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(
-                                    start = (cropHorizontalInset * 250).dp,
-                                    end = (cropHorizontalInset * 250).dp,
-                                    top = (cropVerticalInset * 200).dp,
-                                    bottom = (cropVerticalInset * 200).dp
-                                )
-                                .border(2.dp, FluxCyan, RoundedCornerShape(8.dp))
-                                .background(FluxCyan.copy(alpha = 0.06f))
-                        ) {
-                            Text(
-                                text = selectedAspectRatio.displayName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = VoidBlack,
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            val containerWidthPx = constraints.maxWidth.toFloat()
+                            val containerHeightPx = constraints.maxHeight.toFloat()
+
+                            val boxLeftPx = (cropLeft * containerWidthPx)
+                            val boxTopPx = (cropTop * containerHeightPx)
+                            val boxWidthPx = ((cropRight - cropLeft) * containerWidthPx).coerceAtLeast(40f)
+                            val boxHeightPx = ((cropBottom - cropTop) * containerHeightPx).coerceAtLeast(40f)
+
+                            // Outer dark mask
+                            // Top mask
+                            Box(
                                 modifier = Modifier
-                                    .padding(4.dp)
-                                    .background(FluxCyan, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    .fillMaxWidth()
+                                    .height((cropTop * maxHeight.value).dp)
+                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .align(Alignment.TopStart)
                             )
+                            // Bottom mask
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(((1f - cropBottom) * maxHeight.value).dp)
+                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .align(Alignment.BottomStart)
+                            )
+                            // Left mask
+                            Box(
+                                modifier = Modifier
+                                    .width((cropLeft * maxWidth.value).dp)
+                                    .fillMaxHeight()
+                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .align(Alignment.TopStart)
+                            )
+                            // Right mask
+                            Box(
+                                modifier = Modifier
+                                    .width(((1f - cropRight) * maxWidth.value).dp)
+                                    .fillMaxHeight()
+                                    .background(Color.Black.copy(alpha = 0.55f))
+                                    .align(Alignment.TopEnd)
+                            )
+
+                            // The Active Crop Box (Draggable Body)
+                            Box(
+                                modifier = Modifier
+                                    .offset { IntOffset(boxLeftPx.roundToInt(), boxTopPx.roundToInt()) }
+                                    .size(
+                                        width = (boxWidthPx / containerWidthPx * maxWidth.value).dp,
+                                        height = (boxHeightPx / containerHeightPx * maxHeight.value).dp
+                                    )
+                                    .border(2.dp, FluxCyan, RoundedCornerShape(4.dp))
+                                    .background(FluxCyan.copy(alpha = 0.05f))
+                                    .pointerInput(Unit) {
+                                        detectDragGestures { change, dragAmount ->
+                                            change.consume()
+                                            val deltaXNorm = dragAmount.x / containerWidthPx
+                                            val deltaYNorm = dragAmount.y / containerHeightPx
+
+                                            val currentWidthNorm = cropRight - cropLeft
+                                            val currentHeightNorm = cropBottom - cropTop
+
+                                            val newLeft = (cropLeft + deltaXNorm).coerceIn(0f, 1f - currentWidthNorm)
+                                            val newTop = (cropTop + deltaYNorm).coerceIn(0f, 1f - currentHeightNorm)
+
+                                            cropLeft = newLeft
+                                            cropRight = newLeft + currentWidthNorm
+                                            cropTop = newTop
+                                            cropBottom = newTop + currentHeightNorm
+                                        }
+                                    }
+                            ) {
+                                // Rule of thirds grid lines
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                                Row(modifier = Modifier.fillMaxSize()) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(FluxCyan.copy(alpha = 0.25f)))
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+
+                                // Aspect ratio / drag label badge
+                                Text(
+                                    text = "✋ Drag to move • ${selectedAspectRatio.displayName}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = VoidBlack,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .background(FluxCyan, RoundedCornerShape(bottomEnd = 6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+
+                                // 4 Corner Resize Handles
+                                // Top-Left Handle
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .align(Alignment.TopStart)
+                                        .offset((-8).dp, (-8).dp)
+                                        .background(FluxCyan, CircleShape)
+                                        .border(2.dp, VoidBlack, CircleShape)
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                val deltaX = dragAmount.x / containerWidthPx
+                                                val deltaY = dragAmount.y / containerHeightPx
+                                                cropLeft = (cropLeft + deltaX).coerceIn(0f, cropRight - 0.15f)
+                                                cropTop = (cropTop + deltaY).coerceIn(0f, cropBottom - 0.15f)
+                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                            }
+                                        }
+                                )
+
+                                // Top-Right Handle
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(8.dp, (-8).dp)
+                                        .background(FluxCyan, CircleShape)
+                                        .border(2.dp, VoidBlack, CircleShape)
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                val deltaX = dragAmount.x / containerWidthPx
+                                                val deltaY = dragAmount.y / containerHeightPx
+                                                cropRight = (cropRight + deltaX).coerceIn(cropLeft + 0.15f, 1f)
+                                                cropTop = (cropTop + deltaY).coerceIn(0f, cropBottom - 0.15f)
+                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                            }
+                                        }
+                                )
+
+                                // Bottom-Left Handle
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .align(Alignment.BottomStart)
+                                        .offset((-8).dp, 8.dp)
+                                        .background(FluxCyan, CircleShape)
+                                        .border(2.dp, VoidBlack, CircleShape)
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                val deltaX = dragAmount.x / containerWidthPx
+                                                val deltaY = dragAmount.y / containerHeightPx
+                                                cropLeft = (cropLeft + deltaX).coerceIn(0f, cropRight - 0.15f)
+                                                cropBottom = (cropBottom + deltaY).coerceIn(cropTop + 0.15f, 1f)
+                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                            }
+                                        }
+                                )
+
+                                // Bottom-Right Handle
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .align(Alignment.BottomEnd)
+                                        .offset(8.dp, 8.dp)
+                                        .background(FluxCyan, CircleShape)
+                                        .border(2.dp, VoidBlack, CircleShape)
+                                        .pointerInput(Unit) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                val deltaX = dragAmount.x / containerWidthPx
+                                                val deltaY = dragAmount.y / containerHeightPx
+                                                cropRight = (cropRight + deltaX).coerceIn(cropLeft + 0.15f, 1f)
+                                                cropBottom = (cropBottom + deltaY).coerceIn(cropTop + 0.15f, 1f)
+                                                selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                            }
+                                        }
+                                )
+                            }
                         }
                     }
                 }
@@ -412,8 +574,25 @@ fun VideoPlayerDialog(
 
                             } else {
                                 // TAB 1: SPATIAL CROP
-                                Text("Aspect Ratio Presets:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Aspect Ratio Presets:", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                    TextButton(
+                                        onClick = {
+                                            cropLeft = 0f
+                                            cropTop = 0f
+                                            cropRight = 1f
+                                            cropBottom = 1f
+                                            selectedAspectRatio = CropAspectRatio.ORIGINAL
+                                        },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Reset Frame", color = FluxCyan, fontSize = 12.sp)
+                                    }
+                                }
 
                                 LazyRow(
                                     modifier = Modifier.fillMaxWidth(),
@@ -428,24 +607,34 @@ fun VideoPlayerDialog(
                                                 selectedAspectRatio = preset
                                                 when (preset) {
                                                     CropAspectRatio.ORIGINAL -> {
-                                                        cropHorizontalInset = 0f
-                                                        cropVerticalInset = 0f
+                                                        cropLeft = 0f
+                                                        cropTop = 0f
+                                                        cropRight = 1f
+                                                        cropBottom = 1f
                                                     }
                                                     CropAspectRatio.RATIO_1_1 -> {
-                                                        cropHorizontalInset = 0.15f
-                                                        cropVerticalInset = 0.05f
+                                                        cropLeft = 0.15f
+                                                        cropRight = 0.85f
+                                                        cropTop = 0.10f
+                                                        cropBottom = 0.80f
                                                     }
                                                     CropAspectRatio.RATIO_9_16 -> {
-                                                        cropHorizontalInset = 0.10f
-                                                        cropVerticalInset = 0f
+                                                        cropLeft = 0.12f
+                                                        cropRight = 0.88f
+                                                        cropTop = 0f
+                                                        cropBottom = 1f
                                                     }
                                                     CropAspectRatio.RATIO_16_9 -> {
-                                                        cropHorizontalInset = 0f
-                                                        cropVerticalInset = 0.20f
+                                                        cropLeft = 0f
+                                                        cropRight = 1f
+                                                        cropTop = 0.20f
+                                                        cropBottom = 0.80f
                                                     }
                                                     CropAspectRatio.RATIO_4_5 -> {
-                                                        cropHorizontalInset = 0.12f
-                                                        cropVerticalInset = 0.08f
+                                                        cropLeft = 0.10f
+                                                        cropRight = 0.90f
+                                                        cropTop = 0.05f
+                                                        cropBottom = 0.95f
                                                     }
                                                 }
                                             }
@@ -462,49 +651,11 @@ fun VideoPlayerDialog(
                                 }
 
                                 Spacer(modifier = Modifier.height(10.dp))
-
-                                // Width Crop Adjustment Slider
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Horizontal Crop (Sides)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                    Text("${(cropHorizontalInset * 200).toInt()}%", style = MaterialTheme.typography.labelSmall, color = FluxCyan)
-                                }
-                                Slider(
-                                    value = cropHorizontalInset,
-                                    onValueChange = {
-                                        cropHorizontalInset = it
-                                        selectedAspectRatio = CropAspectRatio.ORIGINAL
-                                    },
-                                    valueRange = 0f..0.45f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = FluxCyan,
-                                        activeTrackColor = FluxCyanDark,
-                                        inactiveTrackColor = CardBlack
-                                    )
-                                )
-
-                                // Height Crop Adjustment Slider
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Vertical Crop (Top/Bottom)", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-                                    Text("${(cropVerticalInset * 200).toInt()}%", style = MaterialTheme.typography.labelSmall, color = FluxCyan)
-                                }
-                                Slider(
-                                    value = cropVerticalInset,
-                                    onValueChange = {
-                                        cropVerticalInset = it
-                                        selectedAspectRatio = CropAspectRatio.ORIGINAL
-                                    },
-                                    valueRange = 0f..0.45f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = FluxCyan,
-                                        activeTrackColor = FluxCyanDark,
-                                        inactiveTrackColor = CardBlack
-                                    )
+                                Text(
+                                    "💡 Tip: Touch & drag the frame on the video to move it, or drag the cyan circular corner handles to freely resize!",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = FluxCyan,
+                                    fontSize = 11.sp
                                 )
                             }
 
