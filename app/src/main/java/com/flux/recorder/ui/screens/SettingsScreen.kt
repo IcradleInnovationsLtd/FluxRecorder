@@ -1,12 +1,18 @@
 package com.flux.recorder.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.flux.recorder.data.AudioSource
@@ -23,7 +29,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     var currentSettings by remember { mutableStateOf(settings) }
-    
+    val context = LocalContext.current
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -69,7 +76,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            
+
             // Frame Rate
             item {
                 SettingSection("Frame Rate") {
@@ -85,7 +92,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            
+
             // Audio Source
             item {
                 SettingSection("Audio Source") {
@@ -101,22 +108,35 @@ fun SettingsScreen(
                     }
                 }
             }
-            
-            // Facecam
+
+            // Facecam & Overlay
             item {
-                SettingSection("Camera") {
+                SettingSection("Camera & Overlay") {
                     SettingSwitchRow(
                         label = "Enable Facecam",
                         checked = currentSettings.enableFacecam,
-                        onCheckedChange = {
-                            currentSettings = currentSettings.copy(enableFacecam = it)
+                        onCheckedChange = { enable ->
+                            if (enable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            }
+                            currentSettings = currentSettings.copy(enableFacecam = enable)
                             onSettingsChanged(currentSettings)
                         }
                     )
+                    Text(
+                        "Shows a floating front-camera preview window during screen recording",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
             }
-            
-            // Shake to Stop
+
+            // Gestures
             item {
                 SettingSection("Gestures") {
                     SettingSwitchRow(
@@ -127,6 +147,46 @@ fun SettingsScreen(
                             onSettingsChanged(currentSettings)
                         }
                     )
+
+                    if (currentSettings.enableShakeToStop) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Shake Sensitivity",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary
+                            )
+                            val label = when {
+                                currentSettings.shakeSensitivity <= 1.8f -> "High"
+                                currentSettings.shakeSensitivity <= 3.0f -> "Medium"
+                                else -> "Low"
+                            }
+                            Text(
+                                "$label (${String.format("%.1f", currentSettings.shakeSensitivity)})",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = FluxCyan
+                            )
+                        }
+
+                        Slider(
+                            value = currentSettings.shakeSensitivity,
+                            onValueChange = {
+                                currentSettings = currentSettings.copy(shakeSensitivity = it)
+                                onSettingsChanged(currentSettings)
+                            },
+                            valueRange = 1.0f..5.0f,
+                            steps = 7,
+                            colors = SliderDefaults.colors(
+                                thumbColor = FluxCyan,
+                                activeTrackColor = FluxCyanDark,
+                                inactiveTrackColor = CardBlack
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -197,7 +257,8 @@ fun SettingSwitchRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             label,

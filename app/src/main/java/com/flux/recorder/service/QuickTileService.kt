@@ -8,38 +8,43 @@ import android.util.Log
 import com.flux.recorder.MainActivity
 
 /**
- * Quick Settings Tile for instant recording access
- * Note: Due to MediaProjection restrictions, we can't start recording directly from here.
- * Instead, we launch MainActivity which handles the MediaProjection permission flow.
+ * Quick Settings Tile for instant recording access.
+ *
+ * Because MediaProjection permission must be granted interactively, we can't start recording
+ * directly from the tile — we launch MainActivity instead. The tile state reflects whether a
+ * recording is currently active by reading a SharedPreference written by RecorderService.
  */
 class QuickTileService : TileService() {
-    
+
     companion object {
         private const val TAG = "QuickTileService"
         const val ACTION_TOGGLE_RECORDING = "com.flux.recorder.TOGGLE_RECORDING"
     }
-    
+
     override fun onStartListening() {
         super.onStartListening()
-        // Always show as inactive since we can't track recording state here
-        updateTile(false)
+        val isRecording = getSharedPreferences(RecorderService.PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(RecorderService.PREF_IS_RECORDING, false)
+        updateTile(isRecording)
     }
-    
+
     override fun onClick() {
         super.onClick()
-        
-        Log.d(TAG, "Quick tile clicked - launching MainActivity for recording")
-        
-        // Launch MainActivity with special action to start recording
+        Log.d(TAG, "Quick tile clicked — launching MainActivity")
+
         val intent = Intent(this, MainActivity::class.java).apply {
             action = ACTION_TOGGLE_RECORDING
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags  = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        
-        // Start activity for MediaProjection permission flow
-        startActivityAndCollapse(intent)
+
+        // Use PendingIntent overload (required on Android 14+, safe on all versions)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        startActivityAndCollapse(pendingIntent)
     }
-    
+
     private fun updateTile(isRecording: Boolean) {
         qsTile?.apply {
             state = if (isRecording) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE

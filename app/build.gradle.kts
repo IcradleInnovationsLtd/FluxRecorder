@@ -68,7 +68,7 @@ android {
     
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1,INDEX.LIST,io.netty.versions.properties}"
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 }
@@ -110,20 +110,10 @@ dependencies {
     // Accompanist for Permissions
     implementation(libs.accompanist.permissions)
     
-    // Security: Protobuf with buffer overflow fix
-    implementation("com.google.protobuf:protobuf-java:3.25.5")
-    implementation("com.google.protobuf:protobuf-java-util:3.25.5")
-    
     // Coil for Image/Video Thumbnails
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
-    
-    // Security: Netty dependency constraints for CVE mitigation
-    implementation("io.netty:netty-codec-http:4.1.125.Final")
-    implementation("io.netty:netty-codec-http2:4.1.125.Final")
-    implementation("io.netty:netty-handler:4.1.118.Final")
-    implementation("io.netty:netty-common:4.1.118.Final")
-    
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     

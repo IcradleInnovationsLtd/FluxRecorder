@@ -39,20 +39,16 @@ enum class AudioSource(val displayName: String) {
  */
 @Parcelize
 data class RecordingSettings(
-    val videoQuality: VideoQuality = VideoQuality.QUALITY_720P,
-    val frameRate: FrameRate = FrameRate.FPS_30,
+    val videoQuality: VideoQuality = VideoQuality.QUALITY_1080P,
+    val frameRate: FrameRate = FrameRate.FPS_60,
     val audioSource: AudioSource = AudioSource.BOTH,
     val enableFacecam: Boolean = false,
     val enableShakeToStop: Boolean = true,
-    val shakeSensitivity: Float = 2.5f // Acceleration threshold in m/s²
+    val shakeSensitivity: Float = 2.5f
 ) : Parcelable {
     /**
-     * Calculate optimal bitrate based on resolution and frame rate
-     * Formula: width * height * fps * motion_factor * 0.07
-     */
-    /**
-     * Calculate optimal bitrate based on resolution and frame rate
-     * Formula: width * height * fps * motion_factor * 0.12 (Balanced Quality/Size)
+     * Calculate optimal bitrate based on resolution and frame rate.
+     * Formula: width × height × fps × motion_factor × 0.12 (balanced quality/size for VBR)
      */
     fun calculateBitrate(): Int {
         val pixels = videoQuality.width * videoQuality.height

@@ -14,8 +14,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.FileProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.flux.recorder.data.Recording
 import com.flux.recorder.data.RecordingSettings
 import com.flux.recorder.data.RecordingState
 import com.flux.recorder.service.RecorderService
@@ -28,137 +28,112 @@ import com.flux.recorder.ui.theme.VoidBlack
 import com.flux.recorder.utils.FileManager
 import com.flux.recorder.utils.PreferencesManager
 import dagger.hilt.android.AndroidEntryPoint
-import java.io.File
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    
+
     @Inject
     lateinit var preferencesManager: PreferencesManager
-    
+
     @Inject
     lateinit var fileManager: FileManager
-    
-    private var recorderService: RecorderService? = null
-    private var serviceBound = false
-    
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as RecorderService.RecorderBinder
-            recorderService = binder.getService()
-            serviceBound = true
-        }
-        
-        override fun onServiceDisconnected(name: ComponentName?) {
-            recorderService = null
-            serviceBound = false
-        }
-    }
-    
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         // Check if launched from Quick Settings Tile
         val shouldStartRecording = intent?.action == QuickTileService.ACTION_TOGGLE_RECORDING
-        
+
         setContent {
-            // Make recorderService observable
             var service by remember { mutableStateOf<RecorderService?>(null) }
             var autoStartRecording by remember { mutableStateOf(shouldStartRecording) }
             val context = LocalContext.current
-            
-            // Update service when connection changes
+
+            // Bind to RecorderService so we can observe recording state reactively
             DisposableEffect(Unit) {
                 val connection = object : ServiceConnection {
                     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                        val serviceBinder = binder as RecorderService.RecorderBinder
-                        service = serviceBinder.getService()
+                        service = (binder as RecorderService.RecorderBinder).getService()
                     }
-                    
                     override fun onServiceDisconnected(name: ComponentName?) {
                         service = null
                     }
                 }
-                
-                // Bind to service
                 val intent = Intent(context, RecorderService::class.java)
                 context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-                
-                onDispose {
-                    context.unbindService(connection)
-                }
+                onDispose { context.unbindService(connection) }
             }
-            
+
             FluxRecorderTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = VoidBlack
                 ) {
-                    // Collect recording state reactively
-                    val recordingState by service?.recordingState?.collectAsState() 
+                    val recordingState by service?.recordingState?.collectAsState()
                         ?: remember { mutableStateOf(RecordingState.Idle) }
-                    
+
                     FluxRecorderApp(
-                        preferencesManager = preferencesManager,
-                        fileManager = fileManager,
-                        onStartRecording = { resultCode, data, settings ->
+                        preferencesManager  = preferencesManager,
+                        fileManager         = fileManager,
+                        onStartRecording    = { resultCode, data, settings ->
                             startRecordingService(resultCode, data, settings)
                             autoStartRecording = false
                         },
-                        onStopRecording = {
-                            stopRecordingService()
-                        },
-                        onPauseRecording = {
-                            pauseRecordingService()
-                        },
-                        onResumeRecording = {
-                            resumeRecordingService()
-                        },
-                        recordingState = recordingState,
-                        onPlayRecording = { file ->
-                            playRecording(file)
-                        },
-                        onShareRecording = { file ->
-                            shareRecording(file)
-                        },
-                        autoStartRecording = autoStartRecording
+                        onStopRecording     = { stopRecordingService() },
+                        onPauseRecording    = { pauseRecordingService() },
+                        onResumeRecording   = { resumeRecordingService() },
+                        recordingState      = recordingState,
+                        onPlayRecording     = { recording -> playRecording(recording) },
+                        onShareRecording    = { recording -> shareRecording(recording) },
+                        autoStartRecording  = autoStartRecording
                     )
                 }
             }
         }
     }
-    
+
+    // -----------------------------------------------------------------------------------------
+    // Service control
+    // -----------------------------------------------------------------------------------------
+
     private fun startRecordingService(resultCode: Int, data: Intent, settings: RecordingSettings) {
-        val intent = Intent(this, RecorderService::class.java).apply {
+        startService(Intent(this, RecorderService::class.java).apply {
             action = RecorderService.ACTION_START_RECORDING
             putExtra(RecorderService.EXTRA_RESULT_CODE, resultCode)
             putExtra(RecorderService.EXTRA_RESULT_DATA, data)
             putExtra(RecorderService.EXTRA_SETTINGS, settings)
-        }
-        
-        startService(intent)
+        })
     }
-    
+
     private fun stopRecordingService() {
-        val intent = Intent(this, RecorderService::class.java).apply {
+        startService(Intent(this, RecorderService::class.java).apply {
             action = RecorderService.ACTION_STOP_RECORDING
-        }
-        startService(intent)
+        })
     }
-    
-    private fun playRecording(file: File) {
+
+    private fun pauseRecordingService() {
+        startService(Intent(this, RecorderService::class.java).apply {
+            action = RecorderService.ACTION_PAUSE_RECORDING
+        })
+    }
+
+    private fun resumeRecordingService() {
+        startService(Intent(this, RecorderService::class.java).apply {
+            action = RecorderService.ACTION_RESUME_RECORDING
+        })
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Play / Share — use content URI directly (works for both MediaStore and legacy)
+    // -----------------------------------------------------------------------------------------
+
+    private fun playRecording(recording: Recording) {
         try {
-            val uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider",
-                file
-            )
-            
             val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "video/mp4")
+                setDataAndType(recording.uri, "video/mp4")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(intent)
@@ -166,18 +141,12 @@ class MainActivity : ComponentActivity() {
             e.printStackTrace()
         }
     }
-    
-    private fun shareRecording(file: File) {
+
+    private fun shareRecording(recording: Recording) {
         try {
-            val uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider",
-                file
-            )
-            
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "video/mp4"
-                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_STREAM, recording.uri)
                 putExtra(Intent.EXTRA_SUBJECT, "Screen Recording")
                 putExtra(Intent.EXTRA_TEXT, "Check out this screen recording from Flux Recorder")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -187,25 +156,11 @@ class MainActivity : ComponentActivity() {
             e.printStackTrace()
         }
     }
-    
-    private fun pauseRecordingService() {
-        val intent = Intent(this, RecorderService::class.java).apply {
-            action = RecorderService.ACTION_PAUSE_RECORDING
-        }
-        startService(intent)
-    }
-    
-    private fun resumeRecordingService() {
-        val intent = Intent(this, RecorderService::class.java).apply {
-            action = RecorderService.ACTION_RESUME_RECORDING
-        }
-        startService(intent)
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-    }
 }
+
+// -------------------------------------------------------------------------------------------------
+// App-level composable
+// -------------------------------------------------------------------------------------------------
 
 @Composable
 fun FluxRecorderApp(
@@ -216,36 +171,34 @@ fun FluxRecorderApp(
     onPauseRecording: () -> Unit,
     onResumeRecording: () -> Unit,
     recordingState: RecordingState,
-    onPlayRecording: (File) -> Unit,
-    onShareRecording: (File) -> Unit,
+    onPlayRecording: (Recording) -> Unit,
+    onShareRecording: (Recording) -> Unit,
     autoStartRecording: Boolean = false
 ) {
     var currentScreen by remember { mutableStateOf("home") }
     var settings by remember { mutableStateOf(preferencesManager.getRecordingSettings()) }
     var recordings by remember { mutableStateOf(fileManager.getAllRecordings()) }
-    
+
     when (currentScreen) {
         "home" -> {
             HomeScreen(
-                recordingState = recordingState,
-                settings = settings,
-                onStartRecording = { resultCode, data ->
-                    onStartRecording(resultCode, data, settings)
-                },
-                onStopRecording = onStopRecording,
-                onPauseRecording = onPauseRecording,
-                onResumeRecording = onResumeRecording,
+                recordingState       = recordingState,
+                settings             = settings,
+                onStartRecording     = { resultCode, data -> onStartRecording(resultCode, data, settings) },
+                onStopRecording      = onStopRecording,
+                onPauseRecording     = onPauseRecording,
+                onResumeRecording    = onResumeRecording,
                 onNavigateToSettings = { currentScreen = "settings" },
                 onNavigateToRecordings = {
                     recordings = fileManager.getAllRecordings()
                     currentScreen = "recordings"
                 },
-                autoStartRecording = autoStartRecording
+                autoStartRecording   = autoStartRecording
             )
         }
         "settings" -> {
             SettingsScreen(
-                settings = settings,
+                settings         = settings,
                 onSettingsChanged = { newSettings ->
                     settings = newSettings
                     preferencesManager.saveRecordingSettings(newSettings)
@@ -255,14 +208,14 @@ fun FluxRecorderApp(
         }
         "recordings" -> {
             RecordingsScreen(
-                recordings = recordings,
-                onNavigateBack = { currentScreen = "home" },
-                onDeleteRecording = { file ->
-                    fileManager.deleteRecording(file)
+                recordings       = recordings,
+                onNavigateBack   = { currentScreen = "home" },
+                onDeleteRecording = { recording ->
+                    fileManager.deleteRecording(recording)
                     recordings = fileManager.getAllRecordings()
                 },
                 onShareRecording = onShareRecording,
-                onPlayRecording = onPlayRecording
+                onPlayRecording  = onPlayRecording
             )
         }
     }

@@ -178,31 +178,29 @@ class AudioRecorder {
         val maxRead = maxOf(micRead, internalRead)
         
         for (i in 0 until maxRead step 2) {
-            // Read 16-bit samples (little-endian)
-            val micSample = if (i < micRead) {
+            // Read 16-bit samples (little-endian). Guard i+1 to avoid OOB on odd-length reads.
+            val micSample: Short = if (i + 1 < micRead) {
                 ((micBuffer[i + 1].toInt() shl 8) or (micBuffer[i].toInt() and 0xFF)).toShort()
             } else {
                 0
             }
-            
-            val internalSample = if (i < internalRead) {
+
+            val internalSample: Short = if (i + 1 < internalRead) {
                 ((internalBuffer[i + 1].toInt() shl 8) or (internalBuffer[i].toInt() and 0xFF)).toShort()
             } else {
                 0
             }
-            
-            // Mix by addition with clamping to prevent overflow (preserves volume)
+
+            // Additive mix with clamping to prevent overflow
             var mixedInt = micSample.toInt() + internalSample.toInt()
             if (mixedInt > 32767) mixedInt = 32767
             else if (mixedInt < -32768) mixedInt = -32768
-            
+
             val mixed = mixedInt.toShort()
-            
-            // Write back to output buffer (little-endian)
             outputBuffer[i] = (mixed.toInt() and 0xFF).toByte()
             outputBuffer[i + 1] = ((mixed.toInt() shr 8) and 0xFF).toByte()
         }
-        
+
         return maxRead
     }
     

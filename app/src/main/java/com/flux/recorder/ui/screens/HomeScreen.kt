@@ -142,7 +142,7 @@ fun HomeScreen(
                 }
                 is RecordingState.Recording -> {
                     Text(
-                        "Recording",
+                        "● Recording",
                         style = MaterialTheme.typography.headlineSmall,
                         color = RecordingRed,
                         fontWeight = FontWeight.Bold
@@ -157,7 +157,7 @@ fun HomeScreen(
                 }
                 is RecordingState.Paused -> {
                     Text(
-                        "Paused",
+                        "⏸ Paused",
                         style = MaterialTheme.typography.headlineSmall,
                         color = WarningYellow
                     )
@@ -193,29 +193,33 @@ fun HomeScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    // Dismiss the error so the user can try again
+                    Button(onClick = onStopRecording) { Text("Dismiss") }
                 }
             }
             
             Spacer(modifier = Modifier.height(48.dp))
             
-            // Record button
+            // Record button — shows STOP when recording or paused
+            val isActiveRecording = recordingState is RecordingState.Recording
+                    || recordingState is RecordingState.Paused
             RecordButton(
-                isRecording = recordingState is RecordingState.Recording,
+                isRecording = isActiveRecording,
                 onClick = {
-                    if (recordingState is RecordingState.Idle) {
-                        // Check if all permissions are granted
-                        if (multiplePermissionsState.allPermissionsGranted) {
-                            // All permissions granted, request MediaProjection
-                            val intent = (context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE) 
-                                as android.media.projection.MediaProjectionManager)
-                                .createScreenCaptureIntent()
-                            mediaProjectionLauncher.launch(intent)
-                        } else {
-                            // Request missing permissions
-                            multiplePermissionsState.launchMultiplePermissionRequest()
+                    when (recordingState) {
+                        is RecordingState.Idle -> {
+                            if (multiplePermissionsState.allPermissionsGranted) {
+                                val intent = (context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                                    as android.media.projection.MediaProjectionManager)
+                                    .createScreenCaptureIntent()
+                                mediaProjectionLauncher.launch(intent)
+                            } else {
+                                multiplePermissionsState.launchMultiplePermissionRequest()
+                            }
                         }
-                    } else {
-                        onStopRecording()
+                        // Stop from either Recording or Paused state
+                        else -> onStopRecording()
                     }
                 }
             )

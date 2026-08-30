@@ -6,31 +6,36 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.flux.recorder.data.Recording
 import com.flux.recorder.ui.theme.*
-import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecordingsScreen(
-    recordings: List<File>,
+    recordings: List<Recording>,
     onNavigateBack: () -> Unit,
-    onDeleteRecording: (File) -> Unit,
-    onShareRecording: (File) -> Unit,
-    onPlayRecording: (File) -> Unit
+    onDeleteRecording: (Recording) -> Unit,
+    onShareRecording: (Recording) -> Unit,
+    onPlayRecording: (Recording) -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Recordings",
+                        "Recordings (${recordings.size})",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -55,11 +60,19 @@ fun RecordingsScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "No recordings yet",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextSecondary
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "No recordings yet",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Tap RECORD on the home screen to get started.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextDisabled
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -69,12 +82,12 @@ fun RecordingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(recordings) { recording ->
+                items(recordings, key = { it.id }) { recording ->
                     RecordingCard(
-                        file = recording,
-                        onDelete = { onDeleteRecording(recording) },
-                        onShare = { onShareRecording(recording) },
-                        onPlay = { onPlayRecording(recording) }
+                        recording = recording,
+                        onDelete  = { onDeleteRecording(recording) },
+                        onShare   = { onShareRecording(recording) },
+                        onPlay    = { onPlayRecording(recording) }
                     )
                 }
             }
@@ -84,77 +97,123 @@ fun RecordingsScreen(
 
 @Composable
 fun RecordingCard(
-    file: File,
+    recording: Recording,
     onDelete: () -> Unit,
     onShare: () -> Unit,
     onPlay: () -> Unit
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete recording?") },
+            text  = { Text("\"${recording.displayName}\" will be permanently deleted.") },
+            confirmButton = {
+                TextButton(onClick = { showDeleteDialog = false; onDelete() }) {
+                    Text("Delete", color = RecordingRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            },
+            containerColor = SurfaceBlack
+        )
+    }
+
     Card(
         onClick = onPlay,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = SurfaceBlack
-        )
+        colors = CardDefaults.cardColors(containerColor = SurfaceBlack)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                file.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                "Size: ${formatFileSize(file.length())}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Thumbnail
+            Box(
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(80.dp),
+                contentAlignment = Alignment.Center
             ) {
-                OutlinedButton(
-                    onClick = onShare,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = FluxCyan
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(recording.uri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Video thumbnail",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Play icon overlay
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = TextPrimary.copy(alpha = 0.85f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+
+            // Details
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = recording.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Spacer(Modifier.height(4.dp))
+
+                // Duration
+                if (recording.durationMs > 0) {
+                    Text(
+                        text = "⏱ ${recording.getFormattedDuration()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = FluxCyan
                     )
-                ) {
-                    Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Share")
                 }
-                
-                OutlinedButton(
-                    onClick = onDelete,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = RecordingRed
-                    )
-                ) {
-                    Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Delete")
+
+                // Size + resolution
+                val meta = buildString {
+                    append(recording.getFormattedSize())
+                    recording.resolution?.let { append("  •  $it") }
+                }
+                Text(
+                    text = meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = onShare,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = FluxCyan)
+                    ) {
+                        Icon(Icons.Default.Share, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Share", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    OutlinedButton(
+                        onClick = { showDeleteDialog = true },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = RecordingRed)
+                    ) {
+                        Icon(Icons.Default.Delete, null, Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Delete", style = MaterialTheme.typography.labelMedium)
+                    }
                 }
             }
         }
-    }
-}
-
-fun formatFileSize(bytes: Long): String {
-    val kb = bytes / 1024.0
-    val mb = kb / 1024.0
-    val gb = mb / 1024.0
-    
-    return when {
-        gb >= 1 -> String.format("%.2f GB", gb)
-        mb >= 1 -> String.format("%.2f MB", mb)
-        else -> String.format("%.2f KB", kb)
     }
 }

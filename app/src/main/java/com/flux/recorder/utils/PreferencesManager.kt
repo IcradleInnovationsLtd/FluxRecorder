@@ -33,20 +33,20 @@ class PreferencesManager(context: Context) {
     fun getRecordingSettings(): RecordingSettings {
         return RecordingSettings(
             videoQuality = VideoQuality.valueOf(
-                prefs.getString(KEY_VIDEO_QUALITY, VideoQuality.QUALITY_1080P.name) 
+                prefs.getString(KEY_VIDEO_QUALITY, VideoQuality.QUALITY_1080P.name)
                     ?: VideoQuality.QUALITY_1080P.name
             ),
             frameRate = FrameRate.valueOf(
-                prefs.getString(KEY_FRAME_RATE, FrameRate.FPS_60.name) 
+                prefs.getString(KEY_FRAME_RATE, FrameRate.FPS_60.name)
                     ?: FrameRate.FPS_60.name
             ),
             audioSource = AudioSource.valueOf(
-                prefs.getString(KEY_AUDIO_SOURCE, AudioSource.BOTH.name) 
+                prefs.getString(KEY_AUDIO_SOURCE, AudioSource.BOTH.name)
                     ?: AudioSource.BOTH.name
             ),
-            enableFacecam = prefs.getBoolean(KEY_ENABLE_FACECAM, false),
+            enableFacecam    = prefs.getBoolean(KEY_ENABLE_FACECAM, false),
             enableShakeToStop = prefs.getBoolean(KEY_SHAKE_TO_STOP, true),
-            shakeSensitivity = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 2.5f)
+            shakeSensitivity  = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 2.5f)
         )
     }
     

@@ -21,9 +21,19 @@ class ScreenCaptureManager(private val context: Context) {
     
     private val displayMetrics: DisplayMetrics
         get() {
-            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val metrics = DisplayMetrics()
-            windowManager.defaultDisplay.getRealMetrics(metrics)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                // API 30+: use currentWindowMetrics (accurate, no deprecation)
+                val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                val bounds = wm.currentWindowMetrics.bounds
+                metrics.widthPixels = bounds.width()
+                metrics.heightPixels = bounds.height()
+                metrics.densityDpi = context.resources.displayMetrics.densityDpi
+            } else {
+                @Suppress("DEPRECATION")
+                (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
+                    .defaultDisplay.getRealMetrics(metrics)
+            }
             return metrics
         }
     

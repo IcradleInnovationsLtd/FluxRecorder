@@ -9,86 +9,78 @@ import android.util.Log
 import kotlin.math.sqrt
 
 /**
- * Detects shake gestures using accelerometer
+ * Detects shake gestures using accelerometer.
+ * The sensitivity parameter is used directly as the delta-acceleration threshold (m/s²).
+ * Default 2.5 m/s² means the phone must change acceleration by 2.5 m/s² between samples.
  */
 class ShakeDetector(
     context: Context,
-    private val sensitivity: Float = 2.5f, // m/s² threshold
+    private val sensitivity: Float = 2.5f, // delta m/s² threshold between consecutive samples
     private val onShakeDetected: () -> Unit
 ) : SensorEventListener {
-    
+
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    
-    private var lastUpdate: Long = 0
+
     private var lastX = 0f
     private var lastY = 0f
     private var lastZ = 0f
-    
+    private var initialized = false
+
+    // Minimum ms between consecutive shake events to avoid rapid-fire callbacks
+    private var lastShakeTime: Long = 0
+
     companion object {
         private const val TAG = "ShakeDetector"
-        private const val SHAKE_THRESHOLD_MULTIPLIER = 9.8f // Convert to m/s²
-        private const val UPDATE_THRESHOLD_MS = 100 // Minimum time between shake detections
+        private const val SHAKE_COOLDOWN_MS = 500L
     }
-    
-    /**
-     * Start listening for shake events
-     */
+
+    /** Start listening for shake events. */
     fun start() {
         accelerometer?.let {
-            sensorManager.registerListener(
-                this,
-                it,
-                SensorManager.SENSOR_DELAY_NORMAL
-            )
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
             Log.d(TAG, "Shake detector started with sensitivity: $sensitivity m/s²")
-        } ?: run {
-            Log.w(TAG, "Accelerometer not available")
-        }
+        } ?: Log.w(TAG, "Accelerometer not available on this device")
     }
-    
-    /**
-     * Stop listening for shake events
-     */
+
+    /** Stop listening for shake events. */
     fun stop() {
         sensorManager.unregisterListener(this)
+        initialized = false
         Log.d(TAG, "Shake detector stopped")
     }
-    
+
     override fun onSensorChanged(event: SensorEvent?) {
         if (event?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
-        
-        val currentTime = System.currentTimeMillis()
-        
-        // Only check for shakes every UPDATE_THRESHOLD_MS
-        if ((currentTime - lastUpdate) < UPDATE_THRESHOLD_MS) return
-        
+
         val x = event.values[0]
         val y = event.values[1]
         val z = event.values[2]
-        
-        if (lastUpdate != 0L) {
-            // Calculate acceleration change
-            val deltaX = x - lastX
-            val deltaY = y - lastY
-            val deltaZ = z - lastZ
-            
-            val acceleration = sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ)
-            
-            // Check if acceleration exceeds threshold
-            if (acceleration > sensitivity * SHAKE_THRESHOLD_MULTIPLIER) {
-                Log.d(TAG, "Shake detected! Acceleration: $acceleration m/s²")
+
+        if (!initialized) {
+            lastX = x; lastY = y; lastZ = z
+            initialized = true
+            return
+        }
+
+        val deltaX = x - lastX
+        val deltaY = y - lastY
+        val deltaZ = z - lastZ
+
+        // Euclidean magnitude of the acceleration change vector
+        val acceleration = sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ)
+
+        lastX = x; lastY = y; lastZ = z
+
+        if (acceleration > sensitivity) {
+            val now = System.currentTimeMillis()
+            if (now - lastShakeTime > SHAKE_COOLDOWN_MS) {
+                lastShakeTime = now
+                Log.d(TAG, "Shake detected! Δacceleration = $acceleration m/s² (threshold $sensitivity)")
                 onShakeDetected()
             }
         }
-        
-        lastUpdate = currentTime
-        lastX = x
-        lastY = y
-        lastZ = z
     }
-    
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not needed for shake detection
-    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 }

@@ -129,13 +129,15 @@ class VideoEncoder(
      */
     fun release() {
         try {
-            inputSurface?.release()
-            inputSurface = null
-            
+            // Stop and release the codec FIRST (it holds a reference to the surface)
             mediaCodec?.stop()
             mediaCodec?.release()
             mediaCodec = null
-            
+
+            // Then release the surface
+            inputSurface?.release()
+            inputSurface = null
+
             Log.d(TAG, "Video encoder released")
         } catch (e: Exception) {
             Log.e(TAG, "Error releasing video encoder", e)
