@@ -105,6 +105,8 @@ class MainActivity : ComponentActivity() {
             putExtra(RecorderService.EXTRA_RESULT_DATA, data)
             putExtra(RecorderService.EXTRA_SETTINGS, settings)
         })
+        // Auto-minimize FluxRecorder to background so it records the intended app/screen, not itself
+        moveTaskToBack(true)
     }
 
     private fun stopRecordingService() {
