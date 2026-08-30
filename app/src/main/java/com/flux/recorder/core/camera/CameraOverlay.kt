@@ -10,17 +10,20 @@ import android.hardware.camera2.*
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.util.Size
 import android.view.*
 import android.widget.FrameLayout
 import android.widget.ImageButton
+import kotlin.math.abs
 
 /**
  * High-performance, hardware-accelerated native Camera2 facecam overlay.
  * Uses exact supported sensor resolutions, dedicated background handler thread,
  * and hardware-accelerated overlay window flags to guarantee continuous 30/60fps preview.
+ * The close (X) button automatically auto-hides after 2.5s and reappears on tap.
  */
 class CameraOverlay(private val context: Context) {
 
@@ -29,6 +32,7 @@ class CameraOverlay(private val context: Context) {
 
     private var overlayView: View? = null
     private var textureView: TextureView? = null
+    private var closeButton: ImageButton? = null
     private var layoutParams: WindowManager.LayoutParams? = null
 
     private var cameraDevice: CameraDevice? = null
@@ -38,6 +42,13 @@ class CameraOverlay(private val context: Context) {
 
     private var selectedCameraId: String? = null
     private var optimalPreviewSize: Size = Size(640, 480)
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val hideCloseButtonRunnable = Runnable {
+        closeButton?.animate()?.alpha(0f)?.setDuration(250)?.withEndAction {
+            closeButton?.visibility = View.GONE
+        }?.start()
+    }
 
     companion object {
         private const val TAG = "CameraOverlay"
@@ -111,8 +122,8 @@ class CameraOverlay(private val context: Context) {
             )
         )
 
-        // Close button (Top Right)
-        val closeButton = ImageButton(context).apply {
+        // Close (X) button with auto-hide functionality
+        val btn = ImageButton(context).apply {
             setImageResource(com.flux.recorder.R.drawable.ic_close_white)
             setColorFilter(Color.WHITE)
             val btnShape = GradientDrawable().apply {
@@ -126,21 +137,27 @@ class CameraOverlay(private val context: Context) {
                 stop()
             }
         }
+        closeButton = btn
         val btnSizePx = (28 * density).toInt()
         val closeParams = FrameLayout.LayoutParams(btnSizePx, btnSizePx).apply {
             gravity = Gravity.TOP or Gravity.END
             setMargins(0, (6 * density).toInt(), (6 * density).toInt(), 0)
         }
-        container.addView(closeButton, closeParams)
+        container.addView(btn, closeParams)
+
+        // Auto-hide close button after 2.5 seconds initially
+        mainHandler.removeCallbacks(hideCloseButtonRunnable)
+        mainHandler.postDelayed(hideCloseButtonRunnable, 2500)
 
         overlayView = container
 
-        // Drag listener
+        // Drag & Tap-to-Reveal listener
         container.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
             private var initialTouchX = 0f
             private var initialTouchY = 0f
+            private var isDragging = false
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 val params = layoutParams ?: return false
@@ -150,15 +167,33 @@ class CameraOverlay(private val context: Context) {
                         initialY = params.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
+                        isDragging = false
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        params.x = initialX + (event.rawX - initialTouchX).toInt()
-                        params.y = initialY + (event.rawY - initialTouchY).toInt()
-                        try {
-                            windowManager.updateViewLayout(overlayView, params)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error updating overlay position", e)
+                        val deltaX = (event.rawX - initialTouchX).toInt()
+                        val deltaY = (event.rawY - initialTouchY).toInt()
+                        if (abs(deltaX) > 6 || abs(deltaY) > 6) {
+                            isDragging = true
+                            params.x = initialX + deltaX
+                            params.y = initialY + deltaY
+                            try {
+                                windowManager.updateViewLayout(overlayView, params)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error updating overlay position", e)
+                            }
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (!isDragging) {
+                            // Tap detected: reveal the close button and auto-hide after 3 seconds
+                            mainHandler.removeCallbacks(hideCloseButtonRunnable)
+                            closeButton?.let { cb ->
+                                cb.visibility = View.VISIBLE
+                                cb.animate().alpha(1f).setDuration(200).start()
+                                mainHandler.postDelayed(hideCloseButtonRunnable, 3000)
+                            }
                         }
                         return true
                     }
@@ -329,6 +364,7 @@ class CameraOverlay(private val context: Context) {
     }
 
     fun stop() {
+        mainHandler.removeCallbacks(hideCloseButtonRunnable)
         closeCamera()
         stopBackgroundThread()
 
@@ -341,6 +377,7 @@ class CameraOverlay(private val context: Context) {
             }
             overlayView = null
             textureView = null
+            closeButton = null
         }
     }
 }
