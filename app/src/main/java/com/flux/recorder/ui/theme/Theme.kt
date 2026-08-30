@@ -50,8 +50,6 @@ fun FluxRecorderTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = VoidBlack.toArgb()
-            window.navigationBarColor = VoidBlack.toArgb()
             WindowCompat.getInsetsController(window, view).apply {
                 isAppearanceLightStatusBars = false
                 isAppearanceLightNavigationBars = false

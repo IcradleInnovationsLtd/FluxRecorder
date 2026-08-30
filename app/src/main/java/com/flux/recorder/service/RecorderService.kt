@@ -82,7 +82,12 @@ class RecorderService : Service() {
     override fun onCreate() {
         super.onCreate()
         notificationHelper = NotificationHelper(this)
-        screenCaptureManager = ScreenCaptureManager(this)
+        screenCaptureManager = ScreenCaptureManager(this).apply {
+            onProjectionStopped = {
+                Log.d(TAG, "ScreenCaptureManager notified projection stopped — stopping recorder")
+                serviceScope.launch(Dispatchers.IO) { stopRecording() }
+            }
+        }
         Log.d(TAG, "RecorderService created")
     }
 
@@ -90,8 +95,19 @@ class RecorderService : Service() {
         when (intent?.action) {
             ACTION_START_RECORDING -> {
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
-                val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
-                val settings = intent.getParcelableExtra<RecordingSettings>(EXTRA_SETTINGS)
+                val resultData = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(EXTRA_RESULT_DATA)
+                }
+
+                val settings = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(EXTRA_SETTINGS, RecordingSettings::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(EXTRA_SETTINGS)
+                }
 
                 if (resultData != null && settings != null) {
                     startRecording(resultCode, resultData, settings)
@@ -370,7 +386,7 @@ class RecorderService : Service() {
                         when (output) {
                             is AudioEncoder.Output.Data -> {
                                 val isConfig = (output.info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
-                                if (output.buffer != null && output.info.size > 0 && audioTrackAdded && !isConfig) {
+                                if (output.info.size > 0 && audioTrackAdded && !isConfig) {
                                     // Adjust presentation timestamp to exclude paused durations
                                     var adjustedPts = output.info.presentationTimeUs - totalPauseDurationUs
                                     if (lastAudioPtsUs >= 0 && adjustedPts <= lastAudioPtsUs) {

@@ -8,22 +8,29 @@ import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.util.DisplayMetrics
+import android.util.Log
 import android.view.Surface
 import android.view.WindowManager
 
 /**
- * Manages MediaProjection for screen capture
+ * Manages MediaProjection for hardware-accelerated screen capture.
  */
 class ScreenCaptureManager(private val context: Context) {
-    
+
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
-    
+
+    /** Optional callback invoked when the system terminates MediaProjection (e.g. from system status bar). */
+    var onProjectionStopped: (() -> Unit)? = null
+
+    companion object {
+        private const val TAG = "ScreenCaptureManager"
+    }
+
     private val displayMetrics: DisplayMetrics
         get() {
             val metrics = DisplayMetrics()
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                // API 30+: use currentWindowMetrics (accurate, no deprecation)
                 val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
                 val bounds = wm.currentWindowMetrics.bounds
                 metrics.widthPixels = bounds.width()
@@ -36,13 +43,14 @@ class ScreenCaptureManager(private val context: Context) {
             }
             return metrics
         }
-    
+
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
-            // Handle cleanup if projection stops unexpectedly
+            Log.d(TAG, "MediaProjection stopped by system")
             virtualDisplay?.release()
             virtualDisplay = null
             mediaProjection = null
+            onProjectionStopped?.invoke()
         }
     }
 
@@ -50,28 +58,29 @@ class ScreenCaptureManager(private val context: Context) {
      * Create intent for MediaProjection permission request
      */
     fun createScreenCaptureIntent(): Intent {
-        val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) 
+        val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
             as MediaProjectionManager
         return projectionManager.createScreenCaptureIntent()
     }
-    
+
     /**
      * Initialize MediaProjection from permission result
      */
     fun initializeProjection(resultCode: Int, data: Intent): Boolean {
-        if (resultCode != Activity.RESULT_OK || data == null) {
+        if (resultCode != Activity.RESULT_OK) {
+            Log.e(TAG, "MediaProjection permission denied by user (resultCode: $resultCode)")
             return false
         }
-        
-        val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) 
+
+        val projectionManager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
             as MediaProjectionManager
-        
+
         mediaProjection = projectionManager.getMediaProjection(resultCode, data)
         mediaProjection?.registerCallback(projectionCallback, null)
-        
+
         return mediaProjection != null
     }
-    
+
     /**
      * Create virtual display for recording
      */
@@ -82,7 +91,7 @@ class ScreenCaptureManager(private val context: Context) {
         densityDpi: Int
     ): VirtualDisplay? {
         val projection = mediaProjection ?: return null
-        
+
         virtualDisplay = projection.createVirtualDisplay(
             "FluxRecorder",
             width,
@@ -93,10 +102,10 @@ class ScreenCaptureManager(private val context: Context) {
             null,
             null
         )
-        
+
         return virtualDisplay
     }
-    
+
     /**
      * Get screen dimensions
      */
@@ -104,37 +113,31 @@ class ScreenCaptureManager(private val context: Context) {
         val metrics = displayMetrics
         return Pair(metrics.widthPixels, metrics.heightPixels)
     }
-    
+
     /**
      * Get screen density
      */
     fun getScreenDensity(): Int {
         return displayMetrics.densityDpi
     }
-    
+
     /**
      * Stop screen capture and release resources
      */
     fun stop() {
-        virtualDisplay?.release()
-        virtualDisplay = null
-        
-        mediaProjection?.unregisterCallback(projectionCallback)
-        mediaProjection?.stop()
-        mediaProjection = null
-    }
-    
-    /**
-     * Get the underlying MediaProjection instance
-     */
-    fun getMediaProjection(): MediaProjection? {
-        return mediaProjection
+        try {
+            virtualDisplay?.release()
+            virtualDisplay = null
+
+            mediaProjection?.unregisterCallback(projectionCallback)
+            mediaProjection?.stop()
+            mediaProjection = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping screen capture", e)
+        }
     }
 
-    /**
-     * Check if projection is active
-     */
-    fun isActive(): Boolean {
-        return mediaProjection != null
-    }
+    fun getMediaProjection(): MediaProjection? = mediaProjection
+
+    fun isActive(): Boolean = mediaProjection != null
 }

@@ -56,23 +56,9 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
 
-    // Required permissions
+    // Required permissions via PermissionManager
     val requiredPermissions = remember(settings.enableFacecam) {
-        buildList {
-            add(android.Manifest.permission.RECORD_AUDIO)
-
-            if (settings.enableFacecam) {
-                add(android.Manifest.permission.CAMERA)
-            }
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                add(android.Manifest.permission.POST_NOTIFICATIONS)
-                add(android.Manifest.permission.READ_MEDIA_VIDEO)
-            } else if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
-                add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-        }
+        com.flux.recorder.utils.PermissionManager.getRequiredPermissions(settings.enableFacecam)
     }
 
     val multiplePermissionsState = rememberMultiplePermissionsState(
