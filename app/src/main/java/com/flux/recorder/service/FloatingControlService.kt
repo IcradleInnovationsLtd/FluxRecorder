@@ -20,14 +20,15 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.Toast
 import com.flux.recorder.R
 import com.flux.recorder.core.camera.CameraOverlay
 import com.flux.recorder.utils.PermissionManager
 import kotlin.math.abs
 
 /**
- * Service for a sleek, compact floating control bubble (pause/resume/stop/camera)
- * with auto-collapse, edge docking, and clean alpha blending (no black box artifacts).
+ * Service for managing the floating Facecam window and optional floating controls.
+ * Floating controls can be completely hidden for 100% clean video recordings.
  */
 class FloatingControlService : Service() {
 
@@ -35,10 +36,10 @@ class FloatingControlService : Service() {
     private var controlOverlay: View? = null
     private val windowManager by lazy { getSystemService(Context.WINDOW_SERVICE) as WindowManager }
 
-    private var isExpanded = false // Start compact so it never obstructs screen
+    private var isExpanded = false
     private var isPaused = false
     private var isFacecamActive = false
-    private var shouldShowControls = true
+    private var shouldShowControls = false // Default to clean recording with no floating buttons
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val autoCollapseRunnable = Runnable {
@@ -49,7 +50,7 @@ class FloatingControlService : Service() {
     }
     private val autoDimRunnable = Runnable {
         if (!isExpanded) {
-            controlOverlay?.animate()?.alpha(0.45f)?.setDuration(300)?.start()
+            controlOverlay?.animate()?.alpha(0.35f)?.setDuration(300)?.start()
         }
     }
 
@@ -60,6 +61,8 @@ class FloatingControlService : Service() {
         const val ACTION_SHOW_PREVIEW_ONLY = "com.flux.recorder.SHOW_CAMERA_PREVIEW"
         const val ACTION_HIDE_PREVIEW_ONLY = "com.flux.recorder.HIDE_CAMERA_PREVIEW"
         const val ACTION_TOGGLE_FACECAM = "com.flux.recorder.TOGGLE_FACECAM"
+        const val ACTION_SHOW_FLOATING_CONTROLS = "com.flux.recorder.SHOW_CONTROLS"
+        const val ACTION_HIDE_FLOATING_CONTROLS = "com.flux.recorder.HIDE_CONTROLS"
     }
 
     override fun onCreate() {
@@ -70,27 +73,18 @@ class FloatingControlService : Service() {
     @SuppressLint("ClickableViewAccessibility")
     private fun createOrUpdateControlOverlay() {
         if (!shouldShowControls) {
-            controlOverlay?.let {
-                try { windowManager.removeView(it) } catch (e: Exception) { Log.e(TAG, "Error removing overlay", e) }
-            }
-            controlOverlay = null
+            removeControlOverlay()
             return
         }
 
         if (controlOverlay != null) {
-            try {
-                windowManager.removeView(controlOverlay)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing old control overlay", e)
-            }
-            controlOverlay = null
+            removeControlOverlay()
         }
 
         if (!PermissionManager.hasOverlayPermission(this)) return
 
         val density = resources.displayMetrics.density
 
-        // Clean transparent overlay without FLAG_SECURE (which caused Android to draw a black rectangle)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -113,7 +107,7 @@ class FloatingControlService : Service() {
             // Auto-collapse after 4 seconds of inactivity
             mainHandler.postDelayed(autoCollapseRunnable, 4000)
 
-            // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Collapse buttons
+            // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Complete-Hide buttons
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding((6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt())
@@ -182,7 +176,7 @@ class FloatingControlService : Service() {
             }
             panel.addView(stopButton)
 
-            // 3. Facecam Toggle button (turn facecam on/off anytime during recording)
+            // 3. Facecam Toggle button
             val facecamButton = createButton(
                 iconRes = R.drawable.ic_camera_white,
                 tintColor = if (isFacecamActive) Color.parseColor("#00E5FF") else Color.parseColor("#88FFFFFF"),
@@ -193,20 +187,19 @@ class FloatingControlService : Service() {
             }
             panel.addView(facecamButton)
 
-            // 4. Collapse button (minimizes to a tiny bubble)
-            val minimizeButton = createButton(
-                iconRes = R.drawable.ic_minimize,
+            // 4. Hide All Controls Completely button (removes overlay from screen entirely)
+            val hideButton = createButton(
+                iconRes = R.drawable.ic_close_white,
                 tintColor = Color.parseColor("#AAAAAA")
             ) {
-                isExpanded = false
-                createOrUpdateControlOverlay()
+                hideControlsCompletely()
             }
-            panel.addView(minimizeButton)
+            panel.addView(hideButton)
 
             rootLayout.addView(panel)
 
         } else {
-            // Collapsed Bubble: Ultra-compact 36dp circular badge
+            // Collapsed Bubble: 36dp circular badge
             val bubbleSize = (36 * density).toInt()
             val bubble = FrameLayout(this).apply {
                 layoutParams = FrameLayout.LayoutParams(bubbleSize, bubbleSize)
@@ -237,7 +230,7 @@ class FloatingControlService : Service() {
             bubble.addView(icon)
             rootLayout.addView(bubble)
 
-            // Auto-dim bubble to 45% opacity after 2.5 seconds
+            // Auto-dim bubble after 2.5 seconds
             mainHandler.removeCallbacks(autoDimRunnable)
             mainHandler.postDelayed(autoDimRunnable, 2500)
         }
@@ -299,6 +292,26 @@ class FloatingControlService : Service() {
         }
     }
 
+    private fun removeControlOverlay() {
+        mainHandler.removeCallbacks(autoDimRunnable)
+        mainHandler.removeCallbacks(autoCollapseRunnable)
+        controlOverlay?.let {
+            try {
+                windowManager.removeView(it)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing control overlay", e)
+            }
+        }
+        controlOverlay = null
+    }
+
+    private fun hideControlsCompletely() {
+        shouldShowControls = false
+        removeControlOverlay()
+        Toast.makeText(this, "Controls hidden. Use Notification bar or Shake to Stop.", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "Floating controls completely hidden for 100% clean recording")
+    }
+
     private fun toggleFacecam() {
         if (isFacecamActive) {
             cameraOverlay?.stop()
@@ -343,12 +356,22 @@ class FloatingControlService : Service() {
                 createOrUpdateControlOverlay()
                 return START_NOT_STICKY
             }
+            ACTION_SHOW_FLOATING_CONTROLS -> {
+                shouldShowControls = true
+                isExpanded = true
+                createOrUpdateControlOverlay()
+                return START_NOT_STICKY
+            }
+            ACTION_HIDE_FLOATING_CONTROLS -> {
+                hideControlsCompletely()
+                return START_NOT_STICKY
+            }
         }
 
         val enableCamera = intent?.getBooleanExtra(EXTRA_ENABLE_CAMERA, false) ?: false
-        shouldShowControls = intent?.getBooleanExtra(EXTRA_SHOW_CONTROLS, true) ?: true
+        shouldShowControls = intent?.getBooleanExtra(EXTRA_SHOW_CONTROLS, false) ?: false
 
-        if (PermissionManager.hasOverlayPermission(this)) {
+        if (shouldShowControls && PermissionManager.hasOverlayPermission(this)) {
             createOrUpdateControlOverlay()
         }
 
@@ -368,22 +391,12 @@ class FloatingControlService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "FloatingControlService destroyed")
-        mainHandler.removeCallbacks(autoDimRunnable)
-        mainHandler.removeCallbacks(autoCollapseRunnable)
+        removeControlOverlay()
         try {
             cameraOverlay?.stop()
             cameraOverlay = null
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping camera overlay", e)
         }
-
-        controlOverlay?.let {
-            try {
-                windowManager.removeView(it)
-            } catch (e: Exception) {
-                Log.e(TAG, "Error removing control overlay", e)
-            }
-        }
-        controlOverlay = null
     }
 }

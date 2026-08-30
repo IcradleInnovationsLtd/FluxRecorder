@@ -132,7 +132,7 @@ fun SettingsScreen(
                         }
                     )
                     Text(
-                        "Shows a floating bubble to pause/stop/toggle camera. Protected from screen capture (invisible in recorded video).",
+                        "When OFF (Recommended): Completely clean screen with ZERO on-screen buttons. Control recordings via the Notification drawer or Shake to Stop.\nWhen ON: Displays an on-screen floating control bubble.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
