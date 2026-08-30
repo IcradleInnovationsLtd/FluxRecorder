@@ -284,6 +284,7 @@ class RecorderService : Service() {
      */
     private suspend fun recordingLoop() {
         var videoTrackAdded = false
+        var lastTimerUpdateMs = 0L
 
         while (coroutineContext.isActive) {
             val currentState = _recordingState.value
@@ -294,46 +295,60 @@ class RecorderService : Service() {
             val isPaused = currentState is RecordingState.Paused
 
             try {
-                val output = videoEncoder?.getEncodedData() ?: VideoEncoder.EncoderOutput.TryAgain
+                var hadOutput = false
 
-                when (output) {
-                    is VideoEncoder.EncoderOutput.FormatChanged -> {
-                        val format = videoEncoder?.getOutputFormat()
-                        if (format != null && !videoTrackAdded) {
-                            muxer?.addVideoTrack(format)
-                            videoTrackAdded = true
-                            Log.d(TAG, "Video track added to muxer")
-                        }
-                    }
-                    is VideoEncoder.EncoderOutput.Data -> {
-                        val (buffer, bufferInfo, bufferIndex) = output
+                // Drain ALL available video encoder buffers in this cycle to prevent BufferQueue overflow
+                while (true) {
+                    val output = videoEncoder?.getEncodedData() ?: VideoEncoder.EncoderOutput.TryAgain
+                    if (output is VideoEncoder.EncoderOutput.TryAgain) break
+                    hadOutput = true
 
-                        // Write to muxer only when not paused and track is ready
-                        if (videoTrackAdded && !isPaused &&
-                            (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0
-                        ) {
-                            // Adjust presentation timestamp to exclude paused durations
-                            var adjustedPts = bufferInfo.presentationTimeUs - totalPauseDurationUs
-                            if (lastVideoPtsUs >= 0 && adjustedPts <= lastVideoPtsUs) {
-                                adjustedPts = lastVideoPtsUs + 1000L // Ensure strictly increasing
+                    when (output) {
+                        is VideoEncoder.EncoderOutput.FormatChanged -> {
+                            val format = videoEncoder?.getOutputFormat()
+                            if (format != null && !videoTrackAdded) {
+                                muxer?.addVideoTrack(format)
+                                videoTrackAdded = true
+                                Log.d(TAG, "Video track added to muxer")
                             }
-                            lastVideoPtsUs = adjustedPts
-                            bufferInfo.presentationTimeUs = adjustedPts
-
-                            muxer?.writeVideoSample(buffer, bufferInfo)
                         }
-                        videoEncoder?.releaseOutputBuffer(bufferIndex)
+                        is VideoEncoder.EncoderOutput.Data -> {
+                            val (buffer, bufferInfo, bufferIndex) = output
+
+                            // Write to muxer only when not paused and track is ready
+                            if (videoTrackAdded && !isPaused &&
+                                (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0
+                            ) {
+                                // Adjust presentation timestamp to exclude paused durations
+                                var adjustedPts = bufferInfo.presentationTimeUs - totalPauseDurationUs
+                                if (lastVideoPtsUs >= 0 && adjustedPts <= lastVideoPtsUs) {
+                                    adjustedPts = lastVideoPtsUs + 1000L // Ensure strictly increasing
+                                }
+                                lastVideoPtsUs = adjustedPts
+                                bufferInfo.presentationTimeUs = adjustedPts
+
+                                muxer?.writeVideoSample(buffer, bufferInfo)
+                            }
+                            videoEncoder?.releaseOutputBuffer(bufferIndex)
+                        }
+                        is VideoEncoder.EncoderOutput.TryAgain -> break
                     }
-                    is VideoEncoder.EncoderOutput.TryAgain -> { /* nothing yet */ }
                 }
 
-                // Update timer only while actively recording
-                if (!isPaused) {
-                    val currentDuration = System.currentTimeMillis() - startTime - pausedDuration
+                // Update UI timer throttled to every 250ms (prevents 100Hz Compose recomposition churn)
+                val now = System.currentTimeMillis()
+                if (!isPaused && (now - lastTimerUpdateMs >= 250L)) {
+                    lastTimerUpdateMs = now
+                    val currentDuration = now - startTime - pausedDuration
                     _recordingState.value = RecordingState.Recording(currentDuration)
                 }
 
-                delay(10)
+                // Yield or brief delay to balance CPU usage and prevent busy-wait
+                if (!hadOutput) {
+                    delay(4)
+                } else {
+                    yield()
+                }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error in recording loop", e)

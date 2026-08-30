@@ -23,7 +23,7 @@ class VideoEncoder(
         private const val TAG = "VideoEncoder"
         private const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC // H.264
         private const val I_FRAME_INTERVAL = 2 // I-frame every 2 seconds (Better for size)
-        private const val TIMEOUT_US = 10000L // 10ms timeout
+        private const val TIMEOUT_US = 2000L // 2ms non-blocking drain timeout
     }
     
     /**

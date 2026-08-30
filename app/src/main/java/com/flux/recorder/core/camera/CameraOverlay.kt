@@ -187,6 +187,7 @@ class CameraOverlay(private val context: Context) : LifecycleOwner {
         val provider = cameraProvider ?: return
 
         val preview = Preview.Builder()
+            .setTargetResolution(android.util.Size(480, 640))
             .build()
 
         preview.setSurfaceProvider(previewView?.surfaceProvider)
