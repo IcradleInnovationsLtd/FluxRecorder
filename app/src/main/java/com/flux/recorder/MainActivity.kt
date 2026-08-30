@@ -206,6 +206,10 @@ fun FluxRecorderApp(
                 HomeScreen(
                     recordingState       = recordingState,
                     settings             = settings,
+                    onSettingsChanged    = { newSettings ->
+                        settings = newSettings
+                        preferencesManager.saveRecordingSettings(newSettings)
+                    },
                     onStartRecording     = { resultCode, data -> onStartRecording(resultCode, data, settings) },
                     onStopRecording      = onStopRecording,
                     onPauseRecording     = onPauseRecording,

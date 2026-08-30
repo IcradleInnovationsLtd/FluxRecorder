@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flux.recorder.data.RecordingSettings
 import com.flux.recorder.data.RecordingState
+import com.flux.recorder.service.FloatingControlService
 import com.flux.recorder.ui.theme.*
+import com.flux.recorder.utils.PermissionManager
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
@@ -46,6 +51,7 @@ import com.google.accompanist.permissions.rememberMultiplePermissionsState
 fun HomeScreen(
     recordingState: RecordingState,
     settings: RecordingSettings,
+    onSettingsChanged: (RecordingSettings) -> Unit,
     onStartRecording: (Int, Intent) -> Unit,
     onStopRecording: () -> Unit,
     onPauseRecording: () -> Unit,
@@ -55,10 +61,11 @@ fun HomeScreen(
     autoStartRecording: Boolean = false
 ) {
     val context = LocalContext.current
+    var isPreviewActive by remember { mutableStateOf(false) }
 
     // Required permissions via PermissionManager
     val requiredPermissions = remember(settings.enableFacecam) {
-        com.flux.recorder.utils.PermissionManager.getRequiredPermissions(settings.enableFacecam)
+        PermissionManager.getRequiredPermissions(settings.enableFacecam)
     }
 
     val multiplePermissionsState = rememberMultiplePermissionsState(
@@ -117,12 +124,10 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Recording status & timer
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -301,10 +306,61 @@ fun HomeScreen(
                 }
             }
 
-            // Clickable Settings Summary Card
-            SettingsSummaryCard(settings = settings, onClick = onNavigateToSettings)
+            // Quick Configuration & Pre-recording Preview Panel
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Test Facecam Preview Button
+                if (!isActiveRecording) {
+                    OutlinedButton(
+                        onClick = {
+                            if (!PermissionManager.hasCameraPermission(context) || !PermissionManager.hasOverlayPermission(context)) {
+                                multiplePermissionsState.launchMultiplePermissionRequest()
+                                return@OutlinedButton
+                            }
+                            isPreviewActive = !isPreviewActive
+                            val intent = Intent(context, FloatingControlService::class.java).apply {
+                                action = if (isPreviewActive) {
+                                    FloatingControlService.ACTION_SHOW_PREVIEW_ONLY
+                                } else {
+                                    FloatingControlService.ACTION_HIDE_PREVIEW_ONLY
+                                }
+                            }
+                            context.startService(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (isPreviewActive) FluxCyanDark.copy(alpha = 0.3f) else SurfaceBlack,
+                            contentColor = if (isPreviewActive) FluxCyan else TextPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPreviewActive) Icons.Default.VideocamOff else Icons.Default.Videocam,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (isPreviewActive) "Close Facecam Preview" else "Preview & Position Facecam",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                // Clickable Settings Summary Card with Quick Toggles
+                SettingsSummaryCard(
+                    settings = settings,
+                    onToggleFacecam = { enabled ->
+                        onSettingsChanged(settings.copy(enableFacecam = enabled))
+                    },
+                    onToggleShake = { enabled ->
+                        onSettingsChanged(settings.copy(enableShakeToStop = enabled))
+                    },
+                    onClick = onNavigateToSettings
+                )
+            }
         }
     }
 }
@@ -338,14 +394,14 @@ fun RecordButton(
     )
 
     Box(
-        modifier = Modifier.size(210.dp),
+        modifier = Modifier.size(190.dp),
         contentAlignment = Alignment.Center
     ) {
         // Outer Glowing Pulse Ring
         if (isRecording && !isPaused) {
             Box(
                 modifier = Modifier
-                    .size(200.dp)
+                    .size(180.dp)
                     .graphicsLayer {
                         scaleX = pulseScale * 1.08f
                         scaleY = pulseScale * 1.08f
@@ -356,39 +412,67 @@ fun RecordButton(
             )
         }
 
-        // Main Action Button
-        Button(
-            onClick = onClick,
+        // Main Record Button
+        Box(
             modifier = Modifier
-                .size(175.dp)
+                .size(150.dp)
                 .graphicsLayer {
-                    scaleX = if (isRecording && !isPaused) pulseScale else 1f
-                    scaleY = if (isRecording && !isPaused) pulseScale else 1f
-                },
-            shape = CircleShape,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isRecording) RecordingRed else ElectricViolet
-            ),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 10.dp, pressedElevation = 4.dp)
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                }
+                .clip(CircleShape)
+                .background(
+                    brush = if (isRecording) {
+                        Brush.linearGradient(
+                            listOf(
+                                if (isPaused) WarningYellow else RecordingRed,
+                                if (isPaused) WarningYellow.copy(alpha = 0.7f) else RecordingRed.copy(alpha = 0.7f)
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            listOf(FluxCyan, FluxCyanDark)
+                        )
+                    }
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(36.dp),
-                    tint = TextPrimary
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = if (isRecording) "STOP" else "RECORD",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.2.sp,
-                    color = TextPrimary
-                )
+                if (isRecording) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(VoidBlack)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        if (isPaused) "RESUME" else "STOP",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = VoidBlack,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(VoidBlack)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "REC",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = VoidBlack,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                }
             }
         }
     }
@@ -397,44 +481,83 @@ fun RecordButton(
 @Composable
 fun SettingsSummaryCard(
     settings: RecordingSettings,
+    onToggleFacecam: (Boolean) -> Unit,
+    onToggleShake: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
     Card(
-        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
         colors = CardDefaults.cardColors(containerColor = SurfaceBlack)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onClick),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Quick Configuration",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = FluxCyan,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("All Settings", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Edit settings",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingRow("Resolution", "${settings.videoQuality.displayName} @ ${settings.frameRate.displayName}")
+            SettingRow("Audio Source", settings.audioSource.displayName)
+
+            Divider(modifier = Modifier.padding(vertical = 6.dp), color = CardBlack)
+
+            // Facecam Quick Switch
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Current Configuration",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = FluxCyan,
-                    fontWeight = FontWeight.Bold
-                )
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Edit settings",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(20.dp)
+                Text("Facecam Overlay", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                Switch(
+                    checked = settings.enableFacecam,
+                    onCheckedChange = onToggleFacecam,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = FluxCyan,
+                        checkedTrackColor = FluxCyanDark,
+                        uncheckedTrackColor = CardBlack
+                    ),
+                    modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
                 )
             }
-            Spacer(modifier = Modifier.height(10.dp))
 
-            SettingRow("Resolution", settings.videoQuality.displayName)
-            SettingRow("Frame Rate", settings.frameRate.displayName)
-            SettingRow("Audio Track", settings.audioSource.displayName)
-            if (settings.enableFacecam) {
-                SettingRow("Facecam Overlay", "Active")
-            }
-            if (settings.enableShakeToStop) {
-                SettingRow("Shake to Stop", "Active (${String.format("%.1f", settings.shakeSensitivity)} m/s²)")
+            // Shake to Stop Quick Switch
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Shake to Stop", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                Switch(
+                    checked = settings.enableShakeToStop,
+                    onCheckedChange = onToggleShake,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = FluxCyan,
+                        checkedTrackColor = FluxCyanDark,
+                        uncheckedTrackColor = CardBlack
+                    ),
+                    modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
+                )
             }
         }
     }
@@ -445,7 +568,7 @@ fun SettingRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(

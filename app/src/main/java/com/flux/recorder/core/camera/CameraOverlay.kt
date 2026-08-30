@@ -113,14 +113,15 @@ class CameraOverlay(private val context: Context) {
 
         // Close button (Top Right)
         val closeButton = ImageButton(context).apply {
-            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+            setImageResource(com.flux.recorder.R.drawable.ic_close_white)
             setColorFilter(Color.WHITE)
             val btnShape = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.parseColor("#99000000"))
             }
             background = btnShape
-            setPadding(8, 8, 8, 8)
+            val pad = (6 * density).toInt()
+            setPadding(pad, pad, pad, pad)
             setOnClickListener {
                 stop()
             }

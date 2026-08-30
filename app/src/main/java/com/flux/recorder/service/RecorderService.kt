@@ -146,6 +146,10 @@ class RecorderService : Service() {
                     foregroundServiceType =
                         foregroundServiceType or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    foregroundServiceType =
+                        foregroundServiceType or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                }
                 startForeground(NotificationHelper.NOTIFICATION_ID, notification, foregroundServiceType)
             } else {
                 startForeground(NotificationHelper.NOTIFICATION_ID, notification)

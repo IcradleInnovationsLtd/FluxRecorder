@@ -15,15 +15,18 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import androidx.core.content.ContextCompat
+import com.flux.recorder.R
 import com.flux.recorder.core.camera.CameraOverlay
 import com.flux.recorder.utils.PermissionManager
 import kotlin.math.abs
 
 /**
- * Service for a floating control overlay (pause/resume/stop/camera) shown during recording.
+ * Service for a modern, collapsible floating control overlay (pause/resume/stop/camera)
+ * shown during recording and camera preview.
  */
 class FloatingControlService : Service() {
 
@@ -31,107 +34,180 @@ class FloatingControlService : Service() {
     private var controlOverlay: View? = null
     private val windowManager by lazy { getSystemService(Context.WINDOW_SERVICE) as WindowManager }
 
-    private var enableCamera = false
+    private var isExpanded = true
     private var isPaused = false
+    private var isFacecamActive = false
 
     companion object {
         private const val TAG = "FloatingControlService"
         const val EXTRA_ENABLE_CAMERA = "enable_camera"
+        const val ACTION_SHOW_PREVIEW_ONLY = "com.flux.recorder.SHOW_CAMERA_PREVIEW"
+        const val ACTION_HIDE_PREVIEW_ONLY = "com.flux.recorder.HIDE_CAMERA_PREVIEW"
+        const val ACTION_TOGGLE_FACECAM = "com.flux.recorder.TOGGLE_FACECAM"
     }
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "FloatingControlService created")
-        if (PermissionManager.hasOverlayPermission(this)) {
-            createControlOverlay()
-        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun createControlOverlay() {
+    private fun createOrUpdateControlOverlay() {
+        if (controlOverlay != null) {
+            try {
+                windowManager.removeView(controlOverlay)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing old control overlay", e)
+            }
+            controlOverlay = null
+        }
+
+        if (!PermissionManager.hasOverlayPermission(this)) return
+
+        val density = resources.displayMetrics.density
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
-            x = 24
-            y = 160
+            x = (16 * density).toInt()
+            y = (120 * density).toInt()
         }
 
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(12, 12, 12, 12)
-            val bg = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 28f
-                setColor(Color.parseColor("#E6121212"))
-                setStroke(2, Color.parseColor("#33FFFFFF"))
+        val rootLayout = FrameLayout(this)
+
+        if (isExpanded) {
+            // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Collapse buttons
+            val panel = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt())
+                val bg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 24f * density
+                    setColor(Color.parseColor("#EE121212"))
+                    setStroke((1.5f * density).toInt(), Color.parseColor("#33FFFFFF"))
+                }
+                background = bg
+                elevation = 20f
             }
-            background = bg
-            elevation = 16f
-        }
 
-        // Helper to create styled circular buttons
-        fun createOverlayButton(iconRes: Int, tintColor: Int, onClick: () -> Unit): ImageButton {
-            return ImageButton(this).apply {
-                setImageResource(iconRes)
-                setColorFilter(tintColor)
-                val shape = GradientDrawable().apply {
+            fun createButton(iconRes: Int, tintColor: Int, bgTint: Int = Color.parseColor("#26FFFFFF"), onClick: () -> Unit): ImageButton {
+                val btnSize = (44 * density).toInt()
+                return ImageButton(this).apply {
+                    setImageResource(iconRes)
+                    setColorFilter(tintColor)
+                    val shape = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(bgTint)
+                    }
+                    background = shape
+                    setPadding((10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt())
+                    layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).apply {
+                        setMargins(0, (3 * density).toInt(), 0, (3 * density).toInt())
+                    }
+                    setOnClickListener { onClick() }
+                }
+            }
+
+            // 1. Pause/Resume button
+            val pauseButton = createButton(
+                iconRes = if (isPaused) R.drawable.ic_play_white else R.drawable.ic_pause_white,
+                tintColor = Color.parseColor("#00E5FF")
+            ) {
+                isPaused = !isPaused
+                if (isPaused) {
+                    startService(Intent(this, RecorderService::class.java).apply {
+                        action = RecorderService.ACTION_PAUSE_RECORDING
+                    })
+                } else {
+                    startService(Intent(this, RecorderService::class.java).apply {
+                        action = RecorderService.ACTION_RESUME_RECORDING
+                    })
+                }
+                createOrUpdateControlOverlay()
+            }
+            panel.addView(pauseButton)
+
+            // 2. Stop button
+            val stopButton = createButton(
+                iconRes = R.drawable.ic_stop_white,
+                tintColor = Color.parseColor("#FF3B30"),
+                bgTint = Color.parseColor("#33FF3B30")
+            ) {
+                Log.d(TAG, "Stop clicked from floating overlay")
+                startService(Intent(this, RecorderService::class.java).apply {
+                    action = RecorderService.ACTION_STOP_RECORDING
+                })
+                stopSelf()
+            }
+            panel.addView(stopButton)
+
+            // 3. Facecam Toggle button (turn facecam on/off anytime during recording)
+            val facecamButton = createButton(
+                iconRes = R.drawable.ic_camera_white,
+                tintColor = if (isFacecamActive) Color.parseColor("#00E5FF") else Color.parseColor("#88FFFFFF"),
+                bgTint = if (isFacecamActive) Color.parseColor("#3300E5FF") else Color.parseColor("#26FFFFFF")
+            ) {
+                toggleFacecam()
+                createOrUpdateControlOverlay()
+            }
+            panel.addView(facecamButton)
+
+            // 4. Collapse / Hide button (minimizes to a tiny bubble)
+            val minimizeButton = createButton(
+                iconRes = R.drawable.ic_minimize,
+                tintColor = Color.parseColor("#AAAAAA")
+            ) {
+                isExpanded = false
+                createOrUpdateControlOverlay()
+            }
+            panel.addView(minimizeButton)
+
+            rootLayout.addView(panel)
+
+        } else {
+            // Collapsed Bubble: Small 44dp circular badge that expands on tap
+            val bubbleSize = (44 * density).toInt()
+            val bubble = FrameLayout(this).apply {
+                layoutParams = FrameLayout.LayoutParams(bubbleSize, bubbleSize)
+                val bg = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#26FFFFFF"))
+                    setColor(Color.parseColor("#EE121212"))
+                    setStroke((2f * density).toInt(), Color.parseColor("#00E5FF"))
                 }
-                background = shape
-                setPadding(14, 14, 14, 14)
-                layoutParams = LinearLayout.LayoutParams(96, 96).apply {
-                    setMargins(0, 4, 0, 4)
+                background = bg
+                elevation = 20f
+                setOnClickListener {
+                    isExpanded = true
+                    createOrUpdateControlOverlay()
                 }
-                setOnClickListener { onClick() }
             }
-        }
 
-        // Pause/Resume button
-        var pauseButton: ImageButton? = null
-        pauseButton = createOverlayButton(
-            iconRes = android.R.drawable.ic_media_pause,
-            tintColor = Color.parseColor("#00E5FF")
-        ) {
-            isPaused = !isPaused
-            if (isPaused) {
-                pauseButton?.setImageResource(android.R.drawable.ic_media_play)
-                startService(Intent(this, RecorderService::class.java).apply {
-                    action = RecorderService.ACTION_PAUSE_RECORDING
-                })
-            } else {
-                pauseButton?.setImageResource(android.R.drawable.ic_media_pause)
-                startService(Intent(this, RecorderService::class.java).apply {
-                    action = RecorderService.ACTION_RESUME_RECORDING
-                })
+            val icon = ImageButton(this).apply {
+                setImageResource(R.drawable.ic_record)
+                setColorFilter(Color.parseColor("#FF3B30"))
+                background = null
+                layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+                setOnClickListener {
+                    isExpanded = true
+                    createOrUpdateControlOverlay()
+                }
             }
+            bubble.addView(icon)
+            rootLayout.addView(bubble)
         }
-        container.addView(pauseButton)
 
-        // Stop button
-        val stopButton = createOverlayButton(
-            iconRes = android.R.drawable.ic_menu_close_clear_cancel,
-            tintColor = Color.parseColor("#FF3B30")
-        ) {
-            Log.d(TAG, "Stop clicked from floating overlay")
-            startService(Intent(this, RecorderService::class.java).apply {
-                action = RecorderService.ACTION_STOP_RECORDING
-            })
-            stopSelf()
-        }
-        container.addView(stopButton)
-
-        // Drag support
-        container.setOnTouchListener(object : View.OnTouchListener {
+        // Drag support for the root layout
+        rootLayout.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
             private var initialTouchX = 0f
             private var initialTouchY = 0f
+            private var isDragging = false
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when (event.action) {
@@ -140,45 +216,97 @@ class FloatingControlService : Service() {
                         initialY = params.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
-                        return true
+                        isDragging = false
+                        return false // Allow clicks if no movement
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val deltaX = (initialTouchX - event.rawX).toInt()
                         val deltaY = (event.rawY - initialTouchY).toInt()
-                        if (abs(deltaX) > 4 || abs(deltaY) > 4) {
+                        if (abs(deltaX) > 6 || abs(deltaY) > 6) {
+                            isDragging = true
                             params.x = initialX + deltaX
                             params.y = initialY + deltaY
                             try {
-                                windowManager.updateViewLayout(container, params)
+                                windowManager.updateViewLayout(rootLayout, params)
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error updating floating control position", e)
                             }
                         }
-                        return true
+                        return isDragging
                     }
                 }
                 return false
             }
         })
 
-        controlOverlay = container
+        controlOverlay = rootLayout
         try {
-            windowManager.addView(container, params)
-            Log.d(TAG, "Control overlay added to WindowManager")
+            windowManager.addView(rootLayout, params)
+            Log.d(TAG, "Control overlay added to WindowManager (isExpanded=$isExpanded)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add control overlay", e)
         }
     }
 
+    private fun toggleFacecam() {
+        if (isFacecamActive) {
+            cameraOverlay?.stop()
+            cameraOverlay = null
+            isFacecamActive = false
+            Log.d(TAG, "Facecam turned OFF")
+        } else {
+            if (PermissionManager.hasCameraPermission(this) && PermissionManager.hasOverlayPermission(this)) {
+                if (cameraOverlay == null) {
+                    cameraOverlay = CameraOverlay(this)
+                }
+                cameraOverlay?.show()
+                isFacecamActive = true
+                Log.d(TAG, "Facecam turned ON")
+            }
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "FloatingControlService started")
-        enableCamera = intent?.getBooleanExtra(EXTRA_ENABLE_CAMERA, false) ?: false
+        Log.d(TAG, "FloatingControlService onStartCommand action: ${intent?.action}")
+
+        when (intent?.action) {
+            ACTION_SHOW_PREVIEW_ONLY -> {
+                // Show facecam preview only (e.g. from Home Screen preview button)
+                if (PermissionManager.hasCameraPermission(this) && PermissionManager.hasOverlayPermission(this)) {
+                    if (cameraOverlay == null) {
+                        cameraOverlay = CameraOverlay(this)
+                    }
+                    cameraOverlay?.show()
+                    isFacecamActive = true
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_HIDE_PREVIEW_ONLY -> {
+                cameraOverlay?.stop()
+                cameraOverlay = null
+                isFacecamActive = false
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_TOGGLE_FACECAM -> {
+                toggleFacecam()
+                createOrUpdateControlOverlay()
+                return START_NOT_STICKY
+            }
+        }
+
+        val enableCamera = intent?.getBooleanExtra(EXTRA_ENABLE_CAMERA, false) ?: false
+
+        if (PermissionManager.hasOverlayPermission(this)) {
+            createOrUpdateControlOverlay()
+        }
 
         if (enableCamera && PermissionManager.hasCameraPermission(this) && PermissionManager.hasOverlayPermission(this)) {
             if (cameraOverlay == null) {
                 cameraOverlay = CameraOverlay(this)
             }
             cameraOverlay?.show()
+            isFacecamActive = true
         }
 
         return START_NOT_STICKY
