@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
@@ -58,6 +59,7 @@ fun HomeScreen(
     onResumeRecording: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToRecordings: () -> Unit,
+    onNavigateToManual: () -> Unit = {},
     autoStartRecording: Boolean = false
 ) {
     val context = LocalContext.current
@@ -105,6 +107,9 @@ fun HomeScreen(
                     )
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToManual) {
+                        Icon(Icons.Default.Info, "User Guide", tint = TextPrimary)
+                    }
                     IconButton(onClick = onNavigateToRecordings) {
                         Icon(Icons.Default.VideoLibrary, "Recordings", tint = TextPrimary)
                     }

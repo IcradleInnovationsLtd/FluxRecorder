@@ -218,24 +218,26 @@ fun FluxRecorderApp(
                     onResumeRecording    = onResumeRecording,
                     onNavigateToSettings = { currentScreen = "settings" },
                     onNavigateToRecordings = { currentScreen = "recordings" },
+                    onNavigateToManual   = { currentScreen = "manual" },
                     autoStartRecording   = autoStartRecording
                 )
             }
             "settings" -> {
                 SettingsScreen(
-                    settings         = settings,
+                    settings          = settings,
                     onSettingsChanged = { newSettings ->
                         settings = newSettings
                         preferencesManager.saveRecordingSettings(newSettings)
                     },
-                    onNavigateBack = { currentScreen = "home" }
+                    onNavigateBack    = { currentScreen = "home" },
+                    onNavigateToManual = { currentScreen = "manual" }
                 )
             }
             "recordings" -> {
                 RecordingsScreen(
-                    recordings       = recordings,
-                    onNavigateBack   = { currentScreen = "home" },
-                    onRefresh        = reloadRecordings,
+                    recordings        = recordings,
+                    onNavigateBack    = { currentScreen = "home" },
+                    onRefresh         = reloadRecordings,
                     onDeleteRecording = { recording ->
                         coroutineScope.launch {
                             withContext(Dispatchers.IO) {
@@ -244,8 +246,13 @@ fun FluxRecorderApp(
                             reloadRecordings()
                         }
                     },
-                    onShareRecording = onShareRecording,
-                    onPlayRecording  = onPlayRecording
+                    onShareRecording  = onShareRecording,
+                    onPlayRecording   = onPlayRecording
+                )
+            }
+            "manual" -> {
+                com.flux.recorder.ui.screens.UserManualScreen(
+                    onNavigateBack = { currentScreen = "home" }
                 )
             }
         }

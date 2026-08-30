@@ -6,8 +6,11 @@ import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +29,8 @@ import com.flux.recorder.ui.theme.*
 fun SettingsScreen(
     settings: RecordingSettings,
     onSettingsChanged: (RecordingSettings) -> Unit,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToManual: () -> Unit = {}
 ) {
     var currentSettings by remember { mutableStateOf(settings) }
     val context = LocalContext.current
@@ -207,6 +211,53 @@ fun SettingsScreen(
                                 activeTrackColor = FluxCyanDark,
                                 inactiveTrackColor = CardBlack
                             )
+                        )
+                    }
+                }
+            }
+
+            // Help & User Manual
+            item {
+                Card(
+                    onClick = onNavigateToManual,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceBlack),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = FluxCyan,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    "User Manual & Guide",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "How to use Facecam, floating controls & settings",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
