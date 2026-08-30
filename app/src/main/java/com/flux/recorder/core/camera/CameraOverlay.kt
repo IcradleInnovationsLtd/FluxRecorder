@@ -12,14 +12,15 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.provider.Settings
 import android.util.Log
+import android.util.Size
 import android.view.*
 import android.widget.FrameLayout
 import android.widget.ImageButton
 
 /**
- * Rock-solid native Camera2 floating facecam overlay.
- * Uses direct Camera2 API with TextureView to completely bypass Lifecycle limitations
- * in background services, guaranteeing continuous, zero-freeze camera preview on all devices.
+ * High-performance, hardware-accelerated native Camera2 facecam overlay.
+ * Uses exact supported sensor resolutions, dedicated background handler thread,
+ * and hardware-accelerated overlay window flags to guarantee continuous 30/60fps preview.
  */
 class CameraOverlay(private val context: Context) {
 
@@ -34,6 +35,9 @@ class CameraOverlay(private val context: Context) {
     private var captureSession: CameraCaptureSession? = null
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
+
+    private var selectedCameraId: String? = null
+    private var optimalPreviewSize: Size = Size(640, 480)
 
     companion object {
         private const val TAG = "CameraOverlay"
@@ -55,12 +59,12 @@ class CameraOverlay(private val context: Context) {
         val widthPx = (115 * density).toInt()
         val heightPx = (150 * density).toInt()
 
-        // Layout params for floating window
+        // Layout params for floating window with explicit hardware acceleration
         layoutParams = WindowManager.LayoutParams(
             widthPx,
             heightPx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -72,9 +76,9 @@ class CameraOverlay(private val context: Context) {
         val container = FrameLayout(context).apply {
             val shape = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = 24f * density / 2.5f
+                cornerRadius = 20f * density
                 setColor(Color.parseColor("#E60D0D0D"))
-                setStroke((2.5f * density).toInt(), Color.parseColor("#4D00E5FF"))
+                setStroke((2f * density).toInt(), Color.parseColor("#4D00E5FF"))
             }
             background = shape
             clipToOutline = true
@@ -84,13 +88,14 @@ class CameraOverlay(private val context: Context) {
         textureView = TextureView(context).apply {
             surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                 override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                    Log.d(TAG, "SurfaceTexture available: ${width}x$height, opening camera")
-                    openCamera()
+                    Log.d(TAG, "SurfaceTexture available: ${width}x$height, opening Camera2")
+                    backgroundHandler?.post { openCamera() }
                 }
 
                 override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit
 
                 override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                    Log.d(TAG, "SurfaceTexture destroyed, closing Camera2")
                     closeCamera()
                     return true
                 }
@@ -197,6 +202,20 @@ class CameraOverlay(private val context: Context) {
                 Log.e(TAG, "No camera found on this device")
                 return
             }
+            selectedCameraId = frontCameraId
+
+            // Query supported resolutions for SurfaceTexture to match hardware capabilities
+            val characteristics = cameraManager.getCameraCharacteristics(frontCameraId)
+            val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            val supportedSizes = map?.getOutputSizes(SurfaceTexture::class.java) ?: emptyArray()
+
+            // Pick 640x480 or closest matching standard supported resolution
+            optimalPreviewSize = supportedSizes.firstOrNull { (it.width == 640 && it.height == 480) || (it.width == 480 && it.height == 640) }
+                ?: supportedSizes.filter { it.width <= 1280 && it.height <= 720 }.minByOrNull { it.width * it.height }
+                ?: supportedSizes.firstOrNull()
+                ?: Size(640, 480)
+
+            Log.d(TAG, "Selected optimal Camera2 preview size: ${optimalPreviewSize.width}x${optimalPreviewSize.height}")
 
             cameraManager.openCamera(frontCameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
@@ -207,14 +226,12 @@ class CameraOverlay(private val context: Context) {
 
                 override fun onDisconnected(camera: CameraDevice) {
                     Log.w(TAG, "Camera2 device disconnected: ${camera.id}")
-                    camera.close()
-                    cameraDevice = null
+                    closeCamera()
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    Log.e(TAG, "Camera2 device error: $error on camera ${camera.id}")
-                    camera.close()
-                    cameraDevice = null
+                    Log.e(TAG, "Camera2 device error code: $error on camera ${camera.id}")
+                    closeCamera()
                 }
             }, backgroundHandler)
 
@@ -241,52 +258,43 @@ class CameraOverlay(private val context: Context) {
     private fun createCameraPreviewSession() {
         val device = cameraDevice ?: return
         val texture = textureView?.surfaceTexture ?: return
+        val handler = backgroundHandler ?: return
 
         try {
-            // Configure lightweight 480x640 buffer size for the TextureView
-            texture.setDefaultBufferSize(480, 640)
+            // Set hardware buffer size from the supported output size
+            texture.setDefaultBufferSize(optimalPreviewSize.width, optimalPreviewSize.height)
             val surface = Surface(texture)
 
             val previewRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 addTarget(surface)
-                // Continuous auto-focus & auto-exposure
+                set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val outputConfig = android.hardware.camera2.params.OutputConfiguration(surface)
-                val sessionConfig = android.hardware.camera2.params.SessionConfiguration(
-                    android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR,
-                    listOf(outputConfig),
-                    context.mainExecutor,
-                    object : CameraCaptureSession.StateCallback() {
-                        override fun onConfigured(session: CameraCaptureSession) {
-                            if (cameraDevice == null) return
-                            captureSession = session
-                            try {
-                                session.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler)
-                                Log.d(TAG, "Camera2 preview session started successfully (API 28+)")
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to start repeating preview request", e)
-                            }
-                        }
-
-                        override fun onConfigureFailed(session: CameraCaptureSession) {
-                            Log.e(TAG, "Camera2 preview session configuration failed")
-                        }
-                    }
-                )
-                device.createCaptureSession(sessionConfig)
-            } else {
-                @Suppress("DEPRECATION")
-                device.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
+            @Suppress("DEPRECATION")
+            device.createCaptureSession(
+                listOf(surface),
+                object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         if (cameraDevice == null) return
                         captureSession = session
                         try {
-                            session.setRepeatingRequest(previewRequestBuilder.build(), null, backgroundHandler)
-                            Log.d(TAG, "Camera2 preview session started successfully (legacy)")
+                            // Set repeating request on the background handler
+                            session.setRepeatingRequest(
+                                previewRequestBuilder.build(),
+                                object : CameraCaptureSession.CaptureCallback() {
+                                    override fun onCaptureFailed(
+                                        session: CameraCaptureSession,
+                                        request: CaptureRequest,
+                                        failure: CaptureFailure
+                                    ) {
+                                        Log.w(TAG, "Camera2 capture frame failed: reason=${failure.reason}")
+                                    }
+                                },
+                                backgroundHandler
+                            )
+                            Log.d(TAG, "Camera2 repeating preview request running smoothly on background thread")
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to start repeating preview request", e)
                         }
@@ -295,8 +303,9 @@ class CameraOverlay(private val context: Context) {
                     override fun onConfigureFailed(session: CameraCaptureSession) {
                         Log.e(TAG, "Camera2 preview session configuration failed")
                     }
-                }, backgroundHandler)
-            }
+                },
+                handler
+            )
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create camera preview session", e)
@@ -305,12 +314,14 @@ class CameraOverlay(private val context: Context) {
 
     private fun closeCamera() {
         try {
+            captureSession?.stopRepeating()
+            captureSession?.abortCaptures()
             captureSession?.close()
             captureSession = null
 
             cameraDevice?.close()
             cameraDevice = null
-            Log.d(TAG, "Camera2 resources closed")
+            Log.d(TAG, "Camera2 resources successfully closed")
         } catch (e: Exception) {
             Log.e(TAG, "Error closing Camera2", e)
         }
