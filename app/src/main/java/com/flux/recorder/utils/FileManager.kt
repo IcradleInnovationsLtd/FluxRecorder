@@ -100,7 +100,7 @@ class FileManager(private val context: Context) {
                 while (cursor.moveToNext()) {
                     val id         = cursor.getLong(idCol)
                     val name       = cursor.getString(nameCol) ?: continue
-                    val size       = cursor.getLong(sizeCol)
+                    var size       = cursor.getLong(sizeCol)
                     val duration   = cursor.getLong(durationCol)
                     val date       = cursor.getLong(dateCol)
                     val resolution = if (resolutionCol >= 0) cursor.getString(resolutionCol) else null
@@ -108,6 +108,24 @@ class FileManager(private val context: Context) {
                     val contentUri = ContentUris.withAppendedId(
                         MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id
                     )
+
+                    // Fix for 0 KB immediate after edit: If MediaStore indexer hasn't computed SIZE yet,
+                    // query the actual file size directly from the open file descriptor or local storage!
+                    if (size <= 0) {
+                        try {
+                            context.contentResolver.openFileDescriptor(contentUri, "r")?.use { pfd ->
+                                val statSize = pfd.statSize
+                                if (statSize > 0) {
+                                    size = statSize
+                                }
+                            }
+                        } catch (e: Exception) {
+                            val localFile = File(getRecordingsDirectory(), name)
+                            if (localFile.exists() && localFile.length() > 0) {
+                                size = localFile.length()
+                            }
+                        }
+                    }
 
                     recordings.add(
                         Recording(
@@ -172,7 +190,7 @@ class FileManager(private val context: Context) {
     }
 
     // -----------------------------------------------------------------------------------------
-    // Public gallery copy (called after recording stops)
+    // Public gallery copy (called after recording stops or after video edit)
     // -----------------------------------------------------------------------------------------
 
     /**
@@ -183,12 +201,14 @@ class FileManager(private val context: Context) {
      */
     fun copyToPublicGallery(privateFile: File): File? {
         return try {
+            val fileLength = privateFile.length()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, privateFile.name)
                     put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
                     put(MediaStore.MediaColumns.RELATIVE_PATH,
                         "${Environment.DIRECTORY_MOVIES}/$PUBLIC_FOLDER")
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
                 val uri = context.contentResolver.insert(
                     MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values
@@ -197,8 +217,15 @@ class FileManager(private val context: Context) {
                     context.contentResolver.openOutputStream(uri)?.use { out ->
                         privateFile.inputStream().use { it.copyTo(out) }
                     }
+                    val updateValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.IS_PENDING, 0)
+                        if (fileLength > 0) {
+                            put(MediaStore.MediaColumns.SIZE, fileLength)
+                        }
+                    }
+                    context.contentResolver.update(uri, updateValues, null, null)
                 }
-                null // URI-based; caller uses MediaScanner for legacy compat
+                null
             } else {
                 val publicDir = File(
                     Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
