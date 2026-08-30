@@ -52,6 +52,8 @@ class CameraOverlay(private val context: Context) {
 
     companion object {
         private const val TAG = "CameraOverlay"
+        @Volatile
+        private var cachedFrontCameraId: String? = null
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -277,11 +279,13 @@ class CameraOverlay(private val context: Context) {
     }
 
     private fun getFrontFacingCameraId(): String? {
+        cachedFrontCameraId?.let { return it }
         try {
             for (id in cameraManager.cameraIdList) {
                 val characteristics = cameraManager.getCameraCharacteristics(id)
                 val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
                 if (facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                    cachedFrontCameraId = id
                     return id
                 }
             }

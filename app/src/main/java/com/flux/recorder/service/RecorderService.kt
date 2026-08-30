@@ -250,6 +250,15 @@ class RecorderService : Service() {
                 setAudioExpected(audioEnabled)
             }
 
+            // Start floating controls / facecam overlay first so camera sensor warms up immediately
+            if (settings.showFloatingControls || settings.enableFacecam) {
+                val floatingIntent = Intent(this, FloatingControlService::class.java).apply {
+                    putExtra(FloatingControlService.EXTRA_ENABLE_CAMERA, settings.enableFacecam)
+                    putExtra(FloatingControlService.EXTRA_SHOW_CONTROLS, settings.showFloatingControls)
+                }
+                startService(floatingIntent)
+            }
+
             // Mark recording state and persist for QuickTile
             startTime = System.currentTimeMillis()
             pausedDuration = 0
@@ -259,22 +268,23 @@ class RecorderService : Service() {
             _recordingState.value = RecordingState.Recording(0)
             setTileRecordingState(true)
 
-            // Start recording loops
-            recordingJob = serviceScope.launch { recordingLoop() }
+            // Start recording loops with camera warm-up synchronization
+            recordingJob = serviceScope.launch {
+                if (settings.enableFacecam) {
+                    delay(350) // Allow Camera2 sensor pipeline to deliver first live frames before capturing display
+                }
+                recordingLoop()
+            }
             if (audioEnabled) {
-                audioJob = serviceScope.launch(Dispatchers.IO) { audioLoop() }
+                audioJob = serviceScope.launch(Dispatchers.IO) {
+                    if (settings.enableFacecam) {
+                        delay(350)
+                    }
+                    audioLoop()
+                }
             }
 
             Log.d(TAG, "Recording started")
-
-            // Show floating controls / facecam overlay based on settings
-            if (settings.showFloatingControls || settings.enableFacecam) {
-                val floatingIntent = Intent(this, FloatingControlService::class.java).apply {
-                    putExtra(FloatingControlService.EXTRA_ENABLE_CAMERA, settings.enableFacecam)
-                    putExtra(FloatingControlService.EXTRA_SHOW_CONTROLS, settings.showFloatingControls)
-                }
-                startService(floatingIntent)
-            }
 
             // Start shake detector if enabled
             if (settings.enableShakeToStop) {
