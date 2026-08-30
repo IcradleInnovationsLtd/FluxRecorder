@@ -254,11 +254,14 @@ class RecorderService : Service() {
 
             Log.d(TAG, "Recording started")
 
-            // Always show the floating control overlay; pass camera preference
-            val floatingIntent = Intent(this, FloatingControlService::class.java).apply {
-                putExtra(FloatingControlService.EXTRA_ENABLE_CAMERA, settings.enableFacecam)
+            // Show floating controls / facecam overlay based on settings
+            if (settings.showFloatingControls || settings.enableFacecam) {
+                val floatingIntent = Intent(this, FloatingControlService::class.java).apply {
+                    putExtra(FloatingControlService.EXTRA_ENABLE_CAMERA, settings.enableFacecam)
+                    putExtra(FloatingControlService.EXTRA_SHOW_CONTROLS, settings.showFloatingControls)
+                }
+                startService(floatingIntent)
             }
-            startService(floatingIntent)
 
             // Start shake detector if enabled
             if (settings.enableShakeToStop) {

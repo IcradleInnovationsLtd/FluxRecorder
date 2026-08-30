@@ -8,7 +8,9 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
@@ -18,7 +20,6 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import androidx.core.content.ContextCompat
 import com.flux.recorder.R
 import com.flux.recorder.core.camera.CameraOverlay
 import com.flux.recorder.utils.PermissionManager
@@ -26,7 +27,7 @@ import kotlin.math.abs
 
 /**
  * Service for a modern, collapsible floating control overlay (pause/resume/stop/camera)
- * shown during recording and camera preview.
+ * marked with FLAG_SECURE so it is invisible to screen capture during recording.
  */
 class FloatingControlService : Service() {
 
@@ -37,10 +38,19 @@ class FloatingControlService : Service() {
     private var isExpanded = true
     private var isPaused = false
     private var isFacecamActive = false
+    private var shouldShowControls = true
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val autoDimRunnable = Runnable {
+        if (!isExpanded) {
+            controlOverlay?.animate()?.alpha(0.35f)?.setDuration(400)?.start()
+        }
+    }
 
     companion object {
         private const val TAG = "FloatingControlService"
         const val EXTRA_ENABLE_CAMERA = "enable_camera"
+        const val EXTRA_SHOW_CONTROLS = "show_controls"
         const val ACTION_SHOW_PREVIEW_ONLY = "com.flux.recorder.SHOW_CAMERA_PREVIEW"
         const val ACTION_HIDE_PREVIEW_ONLY = "com.flux.recorder.HIDE_CAMERA_PREVIEW"
         const val ACTION_TOGGLE_FACECAM = "com.flux.recorder.TOGGLE_FACECAM"
@@ -53,6 +63,14 @@ class FloatingControlService : Service() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createOrUpdateControlOverlay() {
+        if (!shouldShowControls) {
+            controlOverlay?.let {
+                try { windowManager.removeView(it) } catch (e: Exception) { Log.e(TAG, "Error removing overlay", e) }
+            }
+            controlOverlay = null
+            return
+        }
+
         if (controlOverlay != null) {
             try {
                 windowManager.removeView(controlOverlay)
@@ -66,11 +84,12 @@ class FloatingControlService : Service() {
 
         val density = resources.displayMetrics.density
 
+        // FLAG_SECURE prevents MediaProjection from capturing the floating controls into recorded video
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_SECURE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
@@ -81,6 +100,9 @@ class FloatingControlService : Service() {
         val rootLayout = FrameLayout(this)
 
         if (isExpanded) {
+            mainHandler.removeCallbacks(autoDimRunnable)
+            rootLayout.alpha = 1.0f
+
             // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Collapse buttons
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -199,6 +221,10 @@ class FloatingControlService : Service() {
             }
             bubble.addView(icon)
             rootLayout.addView(bubble)
+
+            // Schedule auto-dimming after 3 seconds
+            mainHandler.removeCallbacks(autoDimRunnable)
+            mainHandler.postDelayed(autoDimRunnable, 3000)
         }
 
         // Drag support for the root layout
@@ -212,12 +238,14 @@ class FloatingControlService : Service() {
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
+                        rootLayout.alpha = 1.0f
+                        mainHandler.removeCallbacks(autoDimRunnable)
                         initialX = params.x
                         initialY = params.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDragging = false
-                        return false // Allow clicks if no movement
+                        return false
                     }
                     MotionEvent.ACTION_MOVE -> {
                         val deltaX = (initialTouchX - event.rawX).toInt()
@@ -234,6 +262,11 @@ class FloatingControlService : Service() {
                         }
                         return isDragging
                     }
+                    MotionEvent.ACTION_UP -> {
+                        if (!isExpanded) {
+                            mainHandler.postDelayed(autoDimRunnable, 3000)
+                        }
+                    }
                 }
                 return false
             }
@@ -242,7 +275,7 @@ class FloatingControlService : Service() {
         controlOverlay = rootLayout
         try {
             windowManager.addView(rootLayout, params)
-            Log.d(TAG, "Control overlay added to WindowManager (isExpanded=$isExpanded)")
+            Log.d(TAG, "Control overlay added to WindowManager (FLAG_SECURE active, isExpanded=$isExpanded)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add control overlay", e)
         }
@@ -271,7 +304,6 @@ class FloatingControlService : Service() {
 
         when (intent?.action) {
             ACTION_SHOW_PREVIEW_ONLY -> {
-                // Show facecam preview only (e.g. from Home Screen preview button)
                 if (PermissionManager.hasCameraPermission(this) && PermissionManager.hasOverlayPermission(this)) {
                     if (cameraOverlay == null) {
                         cameraOverlay = CameraOverlay(this)
@@ -296,6 +328,7 @@ class FloatingControlService : Service() {
         }
 
         val enableCamera = intent?.getBooleanExtra(EXTRA_ENABLE_CAMERA, false) ?: false
+        shouldShowControls = intent?.getBooleanExtra(EXTRA_SHOW_CONTROLS, true) ?: true
 
         if (PermissionManager.hasOverlayPermission(this)) {
             createOrUpdateControlOverlay()
@@ -317,6 +350,7 @@ class FloatingControlService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "FloatingControlService destroyed")
+        mainHandler.removeCallbacks(autoDimRunnable)
         try {
             cameraOverlay?.stop()
             cameraOverlay = null

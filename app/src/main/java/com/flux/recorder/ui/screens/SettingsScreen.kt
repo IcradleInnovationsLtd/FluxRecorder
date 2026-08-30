@@ -111,7 +111,29 @@ fun SettingsScreen(
 
             // Facecam & Overlay
             item {
-                SettingSection("Camera & Overlay") {
+                SettingSection("Controls & Overlay") {
+                    SettingSwitchRow(
+                        label = "Floating Controls",
+                        checked = currentSettings.showFloatingControls,
+                        onCheckedChange = { enable ->
+                            if (enable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                                context.startActivity(intent)
+                            }
+                            currentSettings = currentSettings.copy(showFloatingControls = enable)
+                            onSettingsChanged(currentSettings)
+                        }
+                    )
+                    Text(
+                        "Shows a floating bubble to pause/stop/toggle camera. Protected from screen capture (invisible in recorded video).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+
                     SettingSwitchRow(
                         label = "Enable Facecam",
                         checked = currentSettings.enableFacecam,

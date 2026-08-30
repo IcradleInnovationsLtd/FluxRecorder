@@ -23,6 +23,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_ENABLE_FACECAM = "enable_facecam"
         private const val KEY_SHAKE_TO_STOP = "shake_to_stop"
         private const val KEY_SHAKE_SENSITIVITY = "shake_sensitivity"
+        private const val KEY_SHOW_FLOATING_CONTROLS = "show_floating_controls"
         
         private const val KEY_FIRST_LAUNCH = "first_launch"
     }
@@ -44,11 +45,12 @@ class PreferencesManager(context: Context) {
                 prefs.getString(KEY_AUDIO_SOURCE, AudioSource.BOTH.name)
                     ?: AudioSource.BOTH.name
             ),
-            enableFacecam    = prefs.getBoolean(KEY_ENABLE_FACECAM, false),
-            enableShakeToStop = prefs.getBoolean(KEY_SHAKE_TO_STOP, true),
-            shakeSensitivity  = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 12.0f).let {
+            enableFacecam        = prefs.getBoolean(KEY_ENABLE_FACECAM, false),
+            enableShakeToStop     = prefs.getBoolean(KEY_SHAKE_TO_STOP, true),
+            shakeSensitivity      = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 12.0f).let {
                 if (it < 6.0f) 12.0f else it
-            }
+            },
+            showFloatingControls = prefs.getBoolean(KEY_SHOW_FLOATING_CONTROLS, true)
         )
     }
     
@@ -63,6 +65,7 @@ class PreferencesManager(context: Context) {
             putBoolean(KEY_ENABLE_FACECAM, settings.enableFacecam)
             putBoolean(KEY_SHAKE_TO_STOP, settings.enableShakeToStop)
             putFloat(KEY_SHAKE_SENSITIVITY, settings.shakeSensitivity)
+            putBoolean(KEY_SHOW_FLOATING_CONTROLS, settings.showFloatingControls)
             apply()
         }
     }

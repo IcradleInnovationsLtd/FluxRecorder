@@ -44,7 +44,8 @@ data class RecordingSettings(
     val audioSource: AudioSource = AudioSource.BOTH,
     val enableFacecam: Boolean = false,
     val enableShakeToStop: Boolean = true,
-    val shakeSensitivity: Float = 12.0f
+    val shakeSensitivity: Float = 12.0f,
+    val showFloatingControls: Boolean = true
 ) : Parcelable {
     /**
      * Calculate optimal bitrate based on resolution and frame rate.
