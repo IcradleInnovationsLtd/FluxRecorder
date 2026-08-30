@@ -49,9 +49,12 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
 
-# ExoPlayer for Video Playback
+# ExoPlayer & Transformer for Video Playback, Trimming, and Cropping
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "exoplayer" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "exoplayer" }
+androidx-media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "exoplayer" }
+androidx-media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "exoplayer" }
+androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "exoplayer" }
 
 # Accompanist for Permissions
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }

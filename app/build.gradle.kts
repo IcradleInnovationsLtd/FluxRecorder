@@ -103,9 +103,12 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     
-    // ExoPlayer for Video Playback
+    // ExoPlayer & Transformer for Video Playback, Trimming, and Cropping
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
+    implementation(libs.androidx.media3.common)
     
     // Accompanist for Permissions
     implementation(libs.accompanist.permissions)
