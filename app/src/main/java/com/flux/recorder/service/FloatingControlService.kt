@@ -26,8 +26,8 @@ import com.flux.recorder.utils.PermissionManager
 import kotlin.math.abs
 
 /**
- * Service for a modern, collapsible floating control overlay (pause/resume/stop/camera)
- * marked with FLAG_SECURE so it is invisible to screen capture during recording.
+ * Service for a sleek, compact floating control bubble (pause/resume/stop/camera)
+ * with auto-collapse, edge docking, and clean alpha blending (no black box artifacts).
  */
 class FloatingControlService : Service() {
 
@@ -35,15 +35,21 @@ class FloatingControlService : Service() {
     private var controlOverlay: View? = null
     private val windowManager by lazy { getSystemService(Context.WINDOW_SERVICE) as WindowManager }
 
-    private var isExpanded = true
+    private var isExpanded = false // Start compact so it never obstructs screen
     private var isPaused = false
     private var isFacecamActive = false
     private var shouldShowControls = true
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val autoCollapseRunnable = Runnable {
+        if (isExpanded) {
+            isExpanded = false
+            createOrUpdateControlOverlay()
+        }
+    }
     private val autoDimRunnable = Runnable {
         if (!isExpanded) {
-            controlOverlay?.animate()?.alpha(0.35f)?.setDuration(400)?.start()
+            controlOverlay?.animate()?.alpha(0.45f)?.setDuration(300)?.start()
         }
     }
 
@@ -84,41 +90,45 @@ class FloatingControlService : Service() {
 
         val density = resources.displayMetrics.density
 
-        // FLAG_SECURE prevents MediaProjection from capturing the floating controls into recorded video
+        // Clean transparent overlay without FLAG_SECURE (which caused Android to draw a black rectangle)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.END
-            x = (16 * density).toInt()
-            y = (120 * density).toInt()
+            x = (12 * density).toInt()
+            y = (140 * density).toInt()
         }
 
         val rootLayout = FrameLayout(this)
 
         if (isExpanded) {
             mainHandler.removeCallbacks(autoDimRunnable)
+            mainHandler.removeCallbacks(autoCollapseRunnable)
             rootLayout.alpha = 1.0f
+
+            // Auto-collapse after 4 seconds of inactivity
+            mainHandler.postDelayed(autoCollapseRunnable, 4000)
 
             // Expanded Menu: Vertical panel with Pause, Stop, Facecam, and Collapse buttons
             val panel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt())
+                setPadding((6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt())
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = 24f * density
-                    setColor(Color.parseColor("#EE121212"))
-                    setStroke((1.5f * density).toInt(), Color.parseColor("#33FFFFFF"))
+                    cornerRadius = 20f * density
+                    setColor(Color.parseColor("#E6121212"))
+                    setStroke((1.5f * density).toInt(), Color.parseColor("#4D00E5FF"))
                 }
                 background = bg
-                elevation = 20f
+                elevation = 16f
             }
 
             fun createButton(iconRes: Int, tintColor: Int, bgTint: Int = Color.parseColor("#26FFFFFF"), onClick: () -> Unit): ImageButton {
-                val btnSize = (44 * density).toInt()
+                val btnSize = (38 * density).toInt()
                 return ImageButton(this).apply {
                     setImageResource(iconRes)
                     setColorFilter(tintColor)
@@ -127,11 +137,15 @@ class FloatingControlService : Service() {
                         setColor(bgTint)
                     }
                     background = shape
-                    setPadding((10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt())
+                    setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt())
                     layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).apply {
-                        setMargins(0, (3 * density).toInt(), 0, (3 * density).toInt())
+                        setMargins(0, (2 * density).toInt(), 0, (2 * density).toInt())
                     }
-                    setOnClickListener { onClick() }
+                    setOnClickListener {
+                        mainHandler.removeCallbacks(autoCollapseRunnable)
+                        mainHandler.postDelayed(autoCollapseRunnable, 4000)
+                        onClick()
+                    }
                 }
             }
 
@@ -179,7 +193,7 @@ class FloatingControlService : Service() {
             }
             panel.addView(facecamButton)
 
-            // 4. Collapse / Hide button (minimizes to a tiny bubble)
+            // 4. Collapse button (minimizes to a tiny bubble)
             val minimizeButton = createButton(
                 iconRes = R.drawable.ic_minimize,
                 tintColor = Color.parseColor("#AAAAAA")
@@ -192,17 +206,17 @@ class FloatingControlService : Service() {
             rootLayout.addView(panel)
 
         } else {
-            // Collapsed Bubble: Small 44dp circular badge that expands on tap
-            val bubbleSize = (44 * density).toInt()
+            // Collapsed Bubble: Ultra-compact 36dp circular badge
+            val bubbleSize = (36 * density).toInt()
             val bubble = FrameLayout(this).apply {
                 layoutParams = FrameLayout.LayoutParams(bubbleSize, bubbleSize)
                 val bg = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(Color.parseColor("#EE121212"))
-                    setStroke((2f * density).toInt(), Color.parseColor("#00E5FF"))
+                    setColor(Color.parseColor("#CC121212"))
+                    setStroke((1.5f * density).toInt(), Color.parseColor("#00E5FF"))
                 }
                 background = bg
-                elevation = 20f
+                elevation = 12f
                 setOnClickListener {
                     isExpanded = true
                     createOrUpdateControlOverlay()
@@ -213,6 +227,7 @@ class FloatingControlService : Service() {
                 setImageResource(R.drawable.ic_record)
                 setColorFilter(Color.parseColor("#FF3B30"))
                 background = null
+                setPadding((6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt(), (6 * density).toInt())
                 layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
                 setOnClickListener {
                     isExpanded = true
@@ -222,9 +237,9 @@ class FloatingControlService : Service() {
             bubble.addView(icon)
             rootLayout.addView(bubble)
 
-            // Schedule auto-dimming after 3 seconds
+            // Auto-dim bubble to 45% opacity after 2.5 seconds
             mainHandler.removeCallbacks(autoDimRunnable)
-            mainHandler.postDelayed(autoDimRunnable, 3000)
+            mainHandler.postDelayed(autoDimRunnable, 2500)
         }
 
         // Drag support for the root layout
@@ -240,6 +255,7 @@ class FloatingControlService : Service() {
                     MotionEvent.ACTION_DOWN -> {
                         rootLayout.alpha = 1.0f
                         mainHandler.removeCallbacks(autoDimRunnable)
+                        mainHandler.removeCallbacks(autoCollapseRunnable)
                         initialX = params.x
                         initialY = params.y
                         initialTouchX = event.rawX
@@ -264,7 +280,9 @@ class FloatingControlService : Service() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (!isExpanded) {
-                            mainHandler.postDelayed(autoDimRunnable, 3000)
+                            mainHandler.postDelayed(autoDimRunnable, 2500)
+                        } else {
+                            mainHandler.postDelayed(autoCollapseRunnable, 4000)
                         }
                     }
                 }
@@ -275,7 +293,7 @@ class FloatingControlService : Service() {
         controlOverlay = rootLayout
         try {
             windowManager.addView(rootLayout, params)
-            Log.d(TAG, "Control overlay added to WindowManager (FLAG_SECURE active, isExpanded=$isExpanded)")
+            Log.d(TAG, "Control overlay added to WindowManager (isExpanded=$isExpanded)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add control overlay", e)
         }
@@ -351,6 +369,7 @@ class FloatingControlService : Service() {
         super.onDestroy()
         Log.d(TAG, "FloatingControlService destroyed")
         mainHandler.removeCallbacks(autoDimRunnable)
+        mainHandler.removeCallbacks(autoCollapseRunnable)
         try {
             cameraOverlay?.stop()
             cameraOverlay = null
