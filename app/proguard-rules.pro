@@ -1,24 +1,23 @@
 # Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
-
-# Suppress warnings for Netty's BlockHound integration (not needed for Android)
+# Suppress warnings for Netty's BlockHound integration
 -dontwarn reactor.blockhound.integration.BlockHoundIntegration
+
+# Keep Media3 Transformer, Effects, Codecs, and UI
+-keep class androidx.media3.transformer.** { *; }
+-keep class androidx.media3.effect.** { *; }
+-keep class androidx.media3.exoplayer.** { *; }
+-keep class androidx.media3.common.** { *; }
+-dontwarn androidx.media3.**
+
+# Keep Camera2 and CameraX
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
+
+# Keep Hilt and Dagger
+-keep class * extends dagger.hilt.internal.UnsafeCasts { *; }
+-keep class * extends com.flux.recorder.FluxRecorderApplication { *; }
+
+# Keep data classes and Parcelables
+-keep class com.flux.recorder.data.** { *; }
+-keep class * implements android.os.Parcelable { *; }
