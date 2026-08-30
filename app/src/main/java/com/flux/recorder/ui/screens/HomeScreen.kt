@@ -139,7 +139,7 @@ fun HomeScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = VoidBlack,
+                    containerColor = Color.Transparent,
                     titleContentColor = TextPrimary
                 )
             )
