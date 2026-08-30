@@ -161,12 +161,12 @@ fun SettingsScreen(
                                 color = TextPrimary
                             )
                             val label = when {
-                                currentSettings.shakeSensitivity <= 1.8f -> "High"
-                                currentSettings.shakeSensitivity <= 3.0f -> "Medium"
-                                else -> "Low"
+                                currentSettings.shakeSensitivity <= 9.0f -> "High (Easier)"
+                                currentSettings.shakeSensitivity <= 14.0f -> "Medium (Recommended)"
+                                else -> "Low (Harder)"
                             }
                             Text(
-                                "$label (${String.format("%.1f", currentSettings.shakeSensitivity)})",
+                                "$label (${String.format("%.1f", currentSettings.shakeSensitivity)} m/s²)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = FluxCyan
                             )
@@ -178,8 +178,8 @@ fun SettingsScreen(
                                 currentSettings = currentSettings.copy(shakeSensitivity = it)
                                 onSettingsChanged(currentSettings)
                             },
-                            valueRange = 1.0f..5.0f,
-                            steps = 7,
+                            valueRange = 6.0f..20.0f,
+                            steps = 13,
                             colors = SliderDefaults.colors(
                                 thumbColor = FluxCyan,
                                 activeTrackColor = FluxCyanDark,

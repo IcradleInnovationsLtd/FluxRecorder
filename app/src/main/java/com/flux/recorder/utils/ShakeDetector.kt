@@ -6,16 +6,16 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.util.Log
+import kotlin.math.abs
 import kotlin.math.sqrt
 
 /**
- * Detects shake gestures using accelerometer.
- * The sensitivity parameter is used directly as the delta-acceleration threshold (m/s²).
- * Default 2.5 m/s² means the phone must change acceleration by 2.5 m/s² between samples.
+ * Robust shake detector that requires intentional multi-axis shaking (2+ directional reversals)
+ * to avoid false triggers from normal typing, screen touches, or walking.
  */
 class ShakeDetector(
     context: Context,
-    private val sensitivity: Float = 2.5f, // delta m/s² threshold between consecutive samples
+    private val sensitivity: Float = 12.0f, // m/s² delta threshold (default 12.0)
     private val onShakeDetected: () -> Unit
 ) : SensorEventListener {
 
@@ -27,18 +27,21 @@ class ShakeDetector(
     private var lastZ = 0f
     private var initialized = false
 
-    // Minimum ms between consecutive shake events to avoid rapid-fire callbacks
-    private var lastShakeTime: Long = 0
+    private var shakeCount = 0
+    private var firstShakeTime = 0L
+    private var lastShakeTime = 0L
 
     companion object {
         private const val TAG = "ShakeDetector"
-        private const val SHAKE_COOLDOWN_MS = 500L
+        private const val SHAKE_WINDOW_MS = 600L     // Time window for consecutive shakes
+        private const val SHAKE_COOLDOWN_MS = 1500L  // Cooldown after a valid shake-to-stop trigger
+        private const val REQUIRED_SHAKES = 2        // Require 2 rapid shakes to prevent accidental trigger
     }
 
     /** Start listening for shake events. */
     fun start() {
         accelerometer?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
             Log.d(TAG, "Shake detector started with sensitivity: $sensitivity m/s²")
         } ?: Log.w(TAG, "Accelerometer not available on this device")
     }
@@ -47,6 +50,7 @@ class ShakeDetector(
     fun stop() {
         sensorManager.unregisterListener(this)
         initialized = false
+        shakeCount = 0
         Log.d(TAG, "Shake detector stopped")
     }
 
@@ -67,17 +71,34 @@ class ShakeDetector(
         val deltaY = y - lastY
         val deltaZ = z - lastZ
 
-        // Euclidean magnitude of the acceleration change vector
-        val acceleration = sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ)
+        val deltaAcc = sqrt(deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ)
 
         lastX = x; lastY = y; lastZ = z
 
-        if (acceleration > sensitivity) {
-            val now = System.currentTimeMillis()
-            if (now - lastShakeTime > SHAKE_COOLDOWN_MS) {
-                lastShakeTime = now
-                Log.d(TAG, "Shake detected! Δacceleration = $acceleration m/s² (threshold $sensitivity)")
-                onShakeDetected()
+        val now = System.currentTimeMillis()
+
+        // Ignore if still in post-trigger cooldown
+        if (now - lastShakeTime < SHAKE_COOLDOWN_MS) return
+
+        // Check if delta exceeds the intentional shake threshold
+        if (deltaAcc > sensitivity) {
+            if (shakeCount == 0) {
+                firstShakeTime = now
+                shakeCount = 1
+            } else {
+                if (now - firstShakeTime <= SHAKE_WINDOW_MS) {
+                    shakeCount++
+                    if (shakeCount >= REQUIRED_SHAKES) {
+                        lastShakeTime = now
+                        shakeCount = 0
+                        Log.d(TAG, "Intentional shake detected (count=$REQUIRED_SHAKES, Δacc=$deltaAcc)! Triggering stop.")
+                        onShakeDetected()
+                    }
+                } else {
+                    // Window expired, reset with current shake
+                    firstShakeTime = now
+                    shakeCount = 1
+                }
             }
         }
     }

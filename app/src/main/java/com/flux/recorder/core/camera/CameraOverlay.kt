@@ -68,17 +68,21 @@ class CameraOverlay(private val context: Context) : LifecycleOwner {
         }
         lifecycleRegistry.currentState = Lifecycle.State.CREATED
 
+        val density = context.resources.displayMetrics.density
+        val widthPx = (115 * density).toInt()
+        val heightPx = (150 * density).toInt()
+
         // Layout params for overlay window
         layoutParams = WindowManager.LayoutParams(
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT,
+            widthPx,
+            heightPx,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 80
-            y = 120
+            x = (20 * density).toInt()
+            y = (80 * density).toInt()
         }
 
         // Modern rounded container with dark border

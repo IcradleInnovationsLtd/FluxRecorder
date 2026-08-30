@@ -46,7 +46,9 @@ class PreferencesManager(context: Context) {
             ),
             enableFacecam    = prefs.getBoolean(KEY_ENABLE_FACECAM, false),
             enableShakeToStop = prefs.getBoolean(KEY_SHAKE_TO_STOP, true),
-            shakeSensitivity  = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 2.5f)
+            shakeSensitivity  = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 12.0f).let {
+                if (it < 6.0f) 12.0f else it
+            }
         )
     }
     
