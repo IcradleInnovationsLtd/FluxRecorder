@@ -87,6 +87,19 @@ class RecorderService : Service() {
                 Log.d(TAG, "ScreenCaptureManager notified projection stopped — stopping recorder")
                 serviceScope.launch(Dispatchers.IO) { stopRecording() }
             }
+            onCapturedContentVisibilityChanged = { isVisible ->
+                if (isVisible) {
+                    if (_recordingState.value is RecordingState.Paused) {
+                        Log.d(TAG, "Target single app is visible again — auto-resuming recording")
+                        resumeRecording()
+                    }
+                } else {
+                    if (_recordingState.value is RecordingState.Recording) {
+                        Log.d(TAG, "Target single app went to background — auto-pausing recording to prevent black screen")
+                        pauseRecording()
+                    }
+                }
+            }
         }
         Log.d(TAG, "RecorderService created")
     }

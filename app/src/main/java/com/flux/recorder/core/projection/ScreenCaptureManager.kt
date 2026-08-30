@@ -7,6 +7,7 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Surface
@@ -14,6 +15,8 @@ import android.view.WindowManager
 
 /**
  * Manages MediaProjection for hardware-accelerated screen capture.
+ * Supports Android 14+ single-app recording callbacks with automatic pause/resume
+ * on visibility changes to prevent black-screen recordings.
  */
 class ScreenCaptureManager(private val context: Context) {
 
@@ -23,6 +26,12 @@ class ScreenCaptureManager(private val context: Context) {
     /** Optional callback invoked when the system terminates MediaProjection (e.g. from system status bar). */
     var onProjectionStopped: (() -> Unit)? = null
 
+    /** Optional callback invoked when target single-app visibility changes in Android 14+. */
+    var onCapturedContentVisibilityChanged: ((isVisible: Boolean) -> Unit)? = null
+
+    /** Optional callback invoked when target single-app is resized in Android 14+. */
+    var onCapturedContentResized: ((width: Int, height: Int) -> Unit)? = null
+
     companion object {
         private const val TAG = "ScreenCaptureManager"
     }
@@ -30,7 +39,7 @@ class ScreenCaptureManager(private val context: Context) {
     private val displayMetrics: DisplayMetrics
         get() {
             val metrics = DisplayMetrics()
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
                 val bounds = wm.currentWindowMetrics.bounds
                 metrics.widthPixels = bounds.width()
@@ -51,6 +60,16 @@ class ScreenCaptureManager(private val context: Context) {
             virtualDisplay = null
             mediaProjection = null
             onProjectionStopped?.invoke()
+        }
+
+        override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
+            Log.d(TAG, "Single-app captured content visibility changed: isVisible=$isVisible")
+            onCapturedContentVisibilityChanged?.invoke(isVisible)
+        }
+
+        override fun onCapturedContentResize(width: Int, height: Int) {
+            Log.d(TAG, "Single-app captured content resized: ${width}x$height")
+            onCapturedContentResized?.invoke(width, height)
         }
     }
 

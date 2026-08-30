@@ -520,7 +520,7 @@ fun SettingsSummaryCard(
             SettingRow("Resolution", "${settings.videoQuality.displayName} @ ${settings.frameRate.displayName}")
             SettingRow("Audio Source", settings.audioSource.displayName)
 
-            Divider(modifier = Modifier.padding(vertical = 6.dp), color = CardBlack)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = CardBlack)
 
             // Facecam Quick Switch
             Row(
@@ -538,6 +538,14 @@ fun SettingsSummaryCard(
                         uncheckedTrackColor = CardBlack
                     ),
                     modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
+                )
+            }
+            if (settings.enableFacecam) {
+                Text(
+                    "💡 Tip: Select 'Entire screen' in Android's prompt so Facecam is overlaid on your video.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = FluxCyan,
+                    modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
 
