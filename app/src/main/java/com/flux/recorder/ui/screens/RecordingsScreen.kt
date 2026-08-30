@@ -5,11 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -199,11 +195,20 @@ fun RecordingCard(
 
                 // Duration
                 if (recording.durationMs > 0) {
-                    Text(
-                        text = "⏱ ${recording.getFormattedDuration()}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = FluxCyan
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = FluxCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = recording.getFormattedDuration(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = FluxCyan
+                        )
+                    }
                 }
 
                 // Size + resolution

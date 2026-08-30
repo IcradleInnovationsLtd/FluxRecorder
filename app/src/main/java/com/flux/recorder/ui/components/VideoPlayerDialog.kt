@@ -50,8 +50,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
- * Production-ready In-App Video Player & Touch-Draggable Video Cropper / Trimmer.
- * Zero letterbox distortion: The crop frame aligns pixel-for-pixel with the hardware video surface.
+ * Material 3 In-App Video Player & Touch-Draggable Video Cropper / Trimmer.
+ * Built with Material Design 3 components and vector icons throughout.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -114,6 +114,7 @@ fun VideoPlayerDialog(
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
+                    @Suppress("DEPRECATION")
                     val rot = videoSize.unappliedRotationDegrees
                     val effWidth = if (rot == 90 || rot == 270) videoSize.height else videoSize.width
                     val effHeight = if (rot == 90 || rot == 270) videoSize.width else videoSize.height
@@ -159,7 +160,6 @@ fun VideoPlayerDialog(
 
         val videoRatio = videoAspectRatio.coerceAtLeast(0.1f)
         if (targetRatio > videoRatio) {
-            // Target is wider than video: keep width full, crop top & bottom
             val desiredHeightNorm = videoRatio / targetRatio
             val verticalInset = (1f - desiredHeightNorm) / 2f
             cropLeft = 0f
@@ -167,7 +167,6 @@ fun VideoPlayerDialog(
             cropTop = verticalInset.coerceIn(0f, 0.45f)
             cropBottom = (1f - verticalInset).coerceIn(0.55f, 1f)
         } else {
-            // Target is narrower than video: keep height full, crop left & right
             val desiredWidthNorm = targetRatio / videoRatio
             val horizontalInset = (1f - desiredWidthNorm) / 2f
             cropTop = 0f
@@ -206,23 +205,51 @@ fun VideoPlayerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isEditorMode) "✂️ Video Editor & Cropper" else recording.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            maxLines = 1
-                        )
-                        val meta = buildString {
-                            if (totalDurationMs > 0) append("⏱ ${formatTime(totalDurationMs)}  •  ")
-                            append(recording.getFormattedSize())
-                            recording.resolution?.let { append("  •  $it") }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isEditorMode) {
+                                Icon(
+                                    imageVector = Icons.Default.AutoFixHigh,
+                                    contentDescription = null,
+                                    tint = FluxCyan,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(
+                                text = if (isEditorMode) "Video Editor & Cropper" else recording.displayName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                maxLines = 1
+                            )
                         }
-                        Text(
-                            text = meta,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = FluxCyan
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            if (totalDurationMs > 0) {
+                                Icon(
+                                    imageVector = Icons.Default.Timer,
+                                    contentDescription = null,
+                                    tint = FluxCyan,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "${formatTime(totalDurationMs)}  •  ",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = FluxCyan
+                                )
+                            }
+                            Text(
+                                text = buildString {
+                                    append(recording.getFormattedSize())
+                                    recording.resolution?.let { append("  •  $it") }
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                        }
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -264,7 +291,6 @@ fun VideoPlayerDialog(
                         .background(SurfaceBlack),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Exact Aspect Ratio Container that fits within available space
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
@@ -378,17 +404,28 @@ fun VideoPlayerDialog(
                                     }
 
                                     // Badge
-                                    Text(
-                                        text = "✋ Drag to move • ${selectedAspectRatio.displayName}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = VoidBlack,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier
                                             .align(Alignment.TopStart)
                                             .background(FluxCyan, RoundedCornerShape(bottomEnd = 6.dp))
-                                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                                    )
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.OpenWith,
+                                            contentDescription = null,
+                                            tint = VoidBlack,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = selectedAspectRatio.displayName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = VoidBlack,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
 
                                     // 4 Corner Handles
                                     // Top-Left
@@ -506,12 +543,14 @@ fun VideoPlayerDialog(
                                 Tab(
                                     selected = selectedEditorTab == 0,
                                     onClick = { selectedEditorTab = 0 },
-                                    text = { Text("✂️ Trim Video", fontWeight = FontWeight.Bold) }
+                                    icon = { Icon(Icons.Default.ContentCut, null, Modifier.size(16.dp)) },
+                                    text = { Text("Trim Video", fontWeight = FontWeight.Bold) }
                                 )
                                 Tab(
                                     selected = selectedEditorTab == 1,
                                     onClick = { selectedEditorTab = 1 },
-                                    text = { Text("📐 Crop Frame", fontWeight = FontWeight.Bold) }
+                                    icon = { Icon(Icons.Default.Crop, null, Modifier.size(16.dp)) },
+                                    text = { Text("Crop Frame", fontWeight = FontWeight.Bold) }
                                 )
                             }
 
@@ -672,12 +711,24 @@ fun VideoPlayerDialog(
                                 }
 
                                 Spacer(modifier = Modifier.height(10.dp))
-                                Text(
-                                    "💡 Touch & drag the frame on the video to move it, or drag the cyan circular corner handles to freely resize!",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = FluxCyan,
-                                    fontSize = 11.sp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = FluxCyan,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        "Touch & drag the frame on the video to move it, or drag corner handles to resize",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = FluxCyan,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -743,11 +794,11 @@ fun VideoPlayerDialog(
 
                                             isExporting = false
                                             result.onSuccess {
-                                                Toast.makeText(context, "✅ Edited video saved to library!", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Edited video saved to library", Toast.LENGTH_LONG).show()
                                                 onTrimComplete?.invoke()
                                                 isEditorMode = false
                                             }.onFailure { err ->
-                                                Toast.makeText(context, "❌ Editing failed: ${err.message}", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, "Editing failed: ${err.message}", Toast.LENGTH_LONG).show()
                                             }
                                         }
                                     },

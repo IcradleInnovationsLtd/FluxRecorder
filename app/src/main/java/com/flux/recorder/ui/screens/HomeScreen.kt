@@ -546,12 +546,23 @@ fun SettingsSummaryCard(
                 )
             }
             if (settings.enableFacecam) {
-                Text(
-                    "💡 Tip: Select 'Entire screen' in Android's prompt so Facecam is overlaid on your video.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = FluxCyan,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = FluxCyan,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Tip: Select 'Entire screen' in Android prompt for camera overlay",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = FluxCyan
+                    )
+                }
             }
 
             // Shake to Stop Quick Switch

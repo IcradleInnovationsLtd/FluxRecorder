@@ -183,6 +183,20 @@ fun UserManualScreen(
                 )
             }
 
+            // Section 7: Video Editing, Trimming & Cropping
+            item {
+                ManualSection(
+                    icon = Icons.Default.ContentCut,
+                    title = "7. Video Editing, Trimming & Cropping",
+                    steps = listOf(
+                        "Lossless Trimming: In the video player, tap the Edit button and use the Start and End sliders to cut unwanted beginnings or endings.",
+                        "Spatial Cropping: Switch to the 'Crop Frame' tab to select social media aspect ratio presets (1:1, 9:16, 16:9, 4:5).",
+                        "Touch Draggable Frame: Drag the cyan crop box directly over the video, or pull the circular corner handles to freely crop any region.",
+                        "Instant Export: Tap 'Save Video' to export your edited clip directly into your library with hardware acceleration."
+                    )
+                )
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(
