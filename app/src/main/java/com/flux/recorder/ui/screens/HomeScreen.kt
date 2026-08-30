@@ -12,26 +12,19 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -100,21 +93,49 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Flux Recorder",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Flux",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                            color = TextPrimary
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            "Recorder",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Black,
+                            color = FluxCyan
+                        )
+                    }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToManual) {
-                        Icon(Icons.Default.Info, "User Guide", tint = TextPrimary)
+                    IconButton(
+                        onClick = onNavigateToManual,
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceBlack)
+                    ) {
+                        Icon(Icons.Default.Info, "User Guide", tint = TextPrimary, modifier = Modifier.size(20.dp))
                     }
-                    IconButton(onClick = onNavigateToRecordings) {
-                        Icon(Icons.Default.VideoLibrary, "Recordings", tint = TextPrimary)
+                    IconButton(
+                        onClick = onNavigateToRecordings,
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceBlack)
+                    ) {
+                        Icon(Icons.Default.VideoLibrary, "Recordings", tint = FluxCyan, modifier = Modifier.size(20.dp))
                     }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, "Settings", tint = TextPrimary)
+                    IconButton(
+                        onClick = onNavigateToSettings,
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceBlack)
+                    ) {
+                        Icon(Icons.Default.Settings, "Settings", tint = TextPrimary, modifier = Modifier.size(20.dp))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -129,114 +150,141 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Recording status & timer
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
+            // Modern Status Pill Capsule
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
                 when (recordingState) {
                     is RecordingState.Idle -> {
-                        Text(
-                            "Ready to Record",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = SurfaceBlack,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, CardBlack)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(SuccessGreen)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Ready to Record",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                     is RecordingState.Recording -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = RecordingRed.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, RecordingRed.copy(alpha = 0.6f))
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(RecordingRed)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "RECORDING",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = RecordingRed,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(RecordingRed)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "RECORDING • ${formatDuration(recordingState.durationMs)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = RecordingRed,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            formatDuration(recordingState.durationMs),
-                            style = MaterialTheme.typography.displayLarge,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                     is RecordingState.Paused -> {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = WarningYellow.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, WarningYellow.copy(alpha = 0.6f))
                         ) {
-                            Text(
-                                "PAUSED",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = WarningYellow,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                            ) {
+                                Text("❚❚", color = WarningYellow, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "PAUSED • ${formatDuration(recordingState.durationMs)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = WarningYellow,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            formatDuration(recordingState.durationMs),
-                            style = MaterialTheme.typography.displayLarge,
-                            color = WarningYellow,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
                     is RecordingState.Processing -> {
-                        Text(
-                            "Saving recording...",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = FluxCyan
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        LinearProgressIndicator(
-                            progress = { recordingState.progress / 100f },
-                            modifier = Modifier
-                                .fillMaxWidth(0.6f)
-                                .clip(RoundedCornerShape(4.dp)),
-                            color = FluxCyan,
-                            trackColor = SurfaceBlack
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = FluxCyan.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, FluxCyan.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = FluxCyan,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    "Saving recording...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = FluxCyan,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                     is RecordingState.Error -> {
-                        Text(
-                            "Error Occurred",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = RecordingRed,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            recordingState.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedButton(
-                            onClick = onStopRecording,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = FluxCyan)
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = RecordingRed.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, RecordingRed)
                         ) {
-                            Text("Dismiss")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Error, null, tint = RecordingRed, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    recordingState.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = RecordingRed
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // Big Record / Stop Button with GPU graphicsLayer animation
+            // Hero Center Record / Stop Button
             val isActiveRecording = recordingState is RecordingState.Recording || recordingState is RecordingState.Paused
             RecordButton(
                 isRecording = isActiveRecording,
@@ -258,7 +306,7 @@ fun HomeScreen(
                 }
             )
 
-            // In-flight Control Buttons (Pause / Resume / Stop)
+            // In-flight Action Row (Pause / Resume / Stop)
             AnimatedVisibility(
                 visible = isActiveRecording,
                 enter = fadeIn() + scaleIn(),
@@ -268,7 +316,6 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Pause/Resume Button
                     FilledTonalButton(
                         onClick = {
                             if (recordingState is RecordingState.Recording) {
@@ -281,12 +328,13 @@ fun HomeScreen(
                             containerColor = if (recordingState is RecordingState.Paused) FluxCyan else SurfaceBlack,
                             contentColor = if (recordingState is RecordingState.Paused) VoidBlack else TextPrimary
                         ),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp)
                     ) {
                         Icon(
                             imageVector = if (recordingState is RecordingState.Recording) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -295,16 +343,16 @@ fun HomeScreen(
                         )
                     }
 
-                    // Stop Button
                     Button(
                         onClick = onStopRecording,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = RecordingRed,
                             contentColor = TextPrimary
                         ),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 22.dp, vertical = 12.dp)
                     ) {
-                        Icon(Icons.Default.Stop, null, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Stop, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("Stop", fontWeight = FontWeight.Bold)
                     }
@@ -316,13 +364,13 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Test Facecam Preview Button
+                // Facecam Pre-recording Preview Button
                 if (!isActiveRecording) {
-                    OutlinedButton(
+                    Surface(
                         onClick = {
                             if (!PermissionManager.hasCameraPermission(context) || !PermissionManager.hasOverlayPermission(context)) {
                                 multiplePermissionsState.launchMultiplePermissionRequest()
-                                return@OutlinedButton
+                                return@Surface
                             }
                             isPreviewActive = !isPreviewActive
                             val intent = Intent(context, FloatingControlService::class.java).apply {
@@ -334,27 +382,39 @@ fun HomeScreen(
                             }
                             context.startService(intent)
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (isPreviewActive) FluxCyanDark.copy(alpha = 0.3f) else SurfaceBlack,
-                            contentColor = if (isPreviewActive) FluxCyan else TextPrimary
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isPreviewActive) FluxCyanDark.copy(alpha = 0.25f) else SurfaceBlack,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isPreviewActive) FluxCyan else CardBlack
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = if (isPreviewActive) Icons.Default.VideocamOff else Icons.Default.Videocam,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (isPreviewActive) "Close Facecam Preview" else "Preview & Position Facecam",
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isPreviewActive) Icons.Default.VideocamOff else Icons.Default.Videocam,
+                                contentDescription = null,
+                                tint = if (isPreviewActive) FluxCyan else TextPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = if (isPreviewActive) "Close Facecam Preview" else "Preview & Position Facecam",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPreviewActive) FluxCyan else TextPrimary
+                            )
+                        }
                     }
                 }
 
-                // Clickable Settings Summary Card with Quick Toggles
+                // Quick Configuration Card with Modern Badges
                 SettingsSummaryCard(
                     settings = settings,
                     onToggleFacecam = { enabled ->
@@ -376,23 +436,22 @@ fun RecordButton(
     isPaused: Boolean,
     onClick: () -> Unit
 ) {
-    // Pulse animation using GPU graphicsLayer for 60/120Hz zero-jank rendering
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isRecording && !isPaused) 1.08f else 1f,
+        targetValue = if (isRecording && !isPaused) 1.08f else 1.02f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
+            animation = tween(1000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulseScale"
     )
 
     val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = if (isRecording && !isPaused) 0.6f else 0.2f,
+        initialValue = 0.15f,
+        targetValue = if (isRecording && !isPaused) 0.60f else 0.25f,
         animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
+            animation = tween(1000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glowAlpha"
@@ -402,81 +461,86 @@ fun RecordButton(
         modifier = Modifier.size(190.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Outer Glowing Pulse Ring
-        if (isRecording && !isPaused) {
-            Box(
-                modifier = Modifier
-                    .size(180.dp)
-                    .graphicsLayer {
-                        scaleX = pulseScale * 1.08f
-                        scaleY = pulseScale * 1.08f
-                        alpha = glowAlpha
-                    }
-                    .clip(CircleShape)
-                    .background(RecordingRed)
-            )
-        }
-
-        // Main Record Button
+        // Outer Glowing Breathing Halo Ring
         Box(
             modifier = Modifier
-                .size(150.dp)
+                .size(180.dp)
                 .graphicsLayer {
-                    scaleX = pulseScale
-                    scaleY = pulseScale
+                    scaleX = pulseScale * 1.05f
+                    scaleY = pulseScale * 1.05f
+                    alpha = glowAlpha
                 }
                 .clip(CircleShape)
-                .background(
-                    brush = if (isRecording) {
-                        Brush.linearGradient(
-                            listOf(
-                                if (isPaused) WarningYellow else RecordingRed,
-                                if (isPaused) WarningYellow.copy(alpha = 0.7f) else RecordingRed.copy(alpha = 0.7f)
-                            )
-                        )
-                    } else {
-                        Brush.linearGradient(
-                            listOf(FluxCyan, FluxCyanDark)
-                        )
-                    }
-                )
-                .clickable(onClick = onClick),
+                .background(if (isRecording) RecordingRed else FluxCyan)
+        )
+
+        // Middle Dark Glass Border Ring
+        Box(
+            modifier = Modifier
+                .size(156.dp)
+                .clip(CircleShape)
+                .background(CardBlack)
+                .border(2.dp, if (isRecording) RecordingRed.copy(alpha = 0.5f) else FluxCyan.copy(alpha = 0.4f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            // Vibrant Center Button
+            Box(
+                modifier = Modifier
+                    .size(134.dp)
+                    .clip(CircleShape)
+                    .background(
+                        brush = if (isRecording) {
+                            Brush.linearGradient(
+                                listOf(
+                                    if (isPaused) WarningYellow else RecordingRed,
+                                    if (isPaused) WarningYellow.copy(alpha = 0.8f) else Color(0xFFD50000)
+                                )
+                            )
+                        } else {
+                            Brush.linearGradient(
+                                listOf(FluxCyan, FluxCyanDark)
+                            )
+                        }
+                    )
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
             ) {
-                if (isRecording) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(VoidBlack)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        if (isPaused) "RESUME" else "STOP",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = VoidBlack,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(VoidBlack)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        "REC",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = VoidBlack,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (isRecording) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(VoidBlack)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            if (isPaused) "RESUME" else "STOP",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = VoidBlack,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.sp
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .background(RecordingRed)
+                                .border(2.dp, VoidBlack, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "REC",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = VoidBlack,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.5.sp
+                        )
+                    }
                 }
             }
         }
@@ -491,12 +555,13 @@ fun SettingsSummaryCard(
     onClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = SurfaceBlack)
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBlack),
+        border = androidx.compose.foundation.BorderStroke(1.dp, CardBlack)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -516,24 +581,80 @@ fun SettingsSummaryCard(
                         imageVector = Icons.Default.ChevronRight,
                         contentDescription = "Edit settings",
                         tint = TextSecondary,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
 
-            SettingRow("Resolution", "${settings.videoQuality.displayName} @ ${settings.frameRate.displayName}")
-            SettingRow("Audio Source", settings.audioSource.displayName)
+            Spacer(modifier = Modifier.height(12.dp))
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp), color = CardBlack)
+            // Configuration Badges
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Resolution Badge
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = CardBlack,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Videocam, null, tint = FluxCyan, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            Text("Resolution", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
+                            Text(
+                                "${settings.videoQuality.displayName} @ ${settings.frameRate.displayName}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
 
-            // Facecam Quick Switch
+                // Audio Badge
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = CardBlack,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Mic, null, tint = ElectricViolet, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            Text("Audio Source", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
+                            Text(
+                                settings.audioSource.displayName,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = CardBlack)
+
+            // Facecam Switch
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Facecam Overlay", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Face, null, tint = FluxCyan, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Facecam Overlay", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                }
                 Switch(
                     checked = settings.enableFacecam,
                     onCheckedChange = onToggleFacecam,
@@ -545,33 +666,48 @@ fun SettingsSummaryCard(
                     modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
                 )
             }
+
+            // Facecam Info Hint
             if (settings.enableFacecam) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 6.dp)
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = CardBlack,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = 4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = FluxCyan,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "Tip: Select 'Entire screen' in Android prompt for camera overlay",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = FluxCyan
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = FluxCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Tip: Select 'Entire screen' in Android prompt for camera overlay",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = FluxCyan,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
 
-            // Shake to Stop Quick Switch
+            // Shake to Stop Switch
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Shake to Stop", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Vibration, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Shake to Stop", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                }
                 Switch(
                     checked = settings.enableShakeToStop,
                     onCheckedChange = onToggleShake,
@@ -584,28 +720,6 @@ fun SettingsSummaryCard(
                 )
             }
         }
-    }
-}
-
-@Composable
-fun SettingRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.bodySmall,
-            color = TextPrimary,
-            fontWeight = FontWeight.SemiBold
-        )
     }
 }
 
