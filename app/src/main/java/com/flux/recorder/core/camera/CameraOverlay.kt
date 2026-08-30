@@ -21,9 +21,8 @@ import kotlin.math.abs
 
 /**
  * High-performance, hardware-accelerated native Camera2 facecam overlay.
- * Uses exact supported sensor resolutions, dedicated background handler thread,
- * and hardware-accelerated overlay window flags to guarantee continuous 30/60fps preview.
- * The close (X) button automatically auto-hides after 2.5s and reappears on tap.
+ * Keeps the container invisible until the FIRST REAL CAMERA FRAME is rendered to TextureView,
+ * completely preventing any blank/black frame artifacts from being recorded.
  */
 class CameraOverlay(private val context: Context) {
 
@@ -42,6 +41,7 @@ class CameraOverlay(private val context: Context) {
 
     private var selectedCameraId: String? = null
     private var optimalPreviewSize: Size = Size(640, 480)
+    private var isFirstFrameRendered = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hideCloseButtonRunnable = Runnable {
@@ -66,6 +66,7 @@ class CameraOverlay(private val context: Context) {
             return
         }
 
+        isFirstFrameRendered = false
         startBackgroundThread()
 
         val density = context.resources.displayMetrics.density
@@ -85,7 +86,7 @@ class CameraOverlay(private val context: Context) {
             y = (80 * density).toInt()
         }
 
-        // Modern rounded container with glass border
+        // Modern rounded container with glass border — starts INVISIBLE (alpha 0) until real camera frame arrives
         val container = FrameLayout(context).apply {
             val shape = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -95,6 +96,7 @@ class CameraOverlay(private val context: Context) {
             }
             background = shape
             clipToOutline = true
+            alpha = 0f // Start 100% invisible so no black placeholder is EVER recorded
         }
 
         // TextureView for hardware-accelerated Camera2 preview
@@ -113,7 +115,16 @@ class CameraOverlay(private val context: Context) {
                     return true
                 }
 
-                override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
+                override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+                    // REAL CAMERA SENSOR FRAME RECEIVED: reveal the facecam container smoothly!
+                    if (!isFirstFrameRendered) {
+                        isFirstFrameRendered = true
+                        mainHandler.post {
+                            container.animate().alpha(1.0f).setDuration(200).start()
+                            Log.d(TAG, "First real camera image received — facecam smoothly revealed!")
+                        }
+                    }
+                }
             }
         }
         container.addView(
@@ -207,7 +218,7 @@ class CameraOverlay(private val context: Context) {
         // Add to window
         try {
             windowManager.addView(overlayView, layoutParams)
-            Log.d(TAG, "CameraOverlay view added to WindowManager")
+            Log.d(TAG, "CameraOverlay view added to WindowManager (waiting for real frames)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add camera overlay to WindowManager", e)
             overlayView = null
@@ -308,7 +319,7 @@ class CameraOverlay(private val context: Context) {
             val previewRequestBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 addTarget(surface)
                 set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
-                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
             }
 
