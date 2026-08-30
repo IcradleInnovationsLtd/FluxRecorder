@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.flux.recorder.data.Recording
+import com.flux.recorder.ui.components.VideoPlayerDialog
 import com.flux.recorder.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,6 +31,18 @@ fun RecordingsScreen(
     onShareRecording: (Recording) -> Unit,
     onPlayRecording: (Recording) -> Unit
 ) {
+    var selectedVideoForPlayback by remember { mutableStateOf<Recording?>(null) }
+
+    // In-App Video Player Dialog
+    selectedVideoForPlayback?.let { recording ->
+        VideoPlayerDialog(
+            recording = recording,
+            onDismiss = { selectedVideoForPlayback = null },
+            onShare = onShareRecording,
+            onOpenExternal = onPlayRecording
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,7 +100,7 @@ fun RecordingsScreen(
                         recording = recording,
                         onDelete  = { onDeleteRecording(recording) },
                         onShare   = { onShareRecording(recording) },
-                        onPlay    = { onPlayRecording(recording) }
+                        onPlay    = { selectedVideoForPlayback = recording }
                     )
                 }
             }

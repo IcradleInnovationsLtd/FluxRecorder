@@ -58,6 +58,11 @@ class RecorderService : Service() {
     private var pausedDuration: Long = 0
     private var pauseStartTime: Long = 0
 
+    // Presentation timestamp synchronization
+    private var totalPauseDurationUs: Long = 0L
+    private var lastVideoPtsUs: Long = -1L
+    private var lastAudioPtsUs: Long = -1L
+
     companion object {
         private const val TAG = "RecorderService"
         const val ACTION_START_RECORDING = "com.flux.recorder.START_RECORDING"
@@ -112,10 +117,11 @@ class RecorderService : Service() {
         }
 
         try {
-            // Start foreground service
+            // Start foreground service with notification
             val notification = notificationHelper.createRecordingNotification(
                 "Recording",
-                "Screen recording in progress..."
+                "Screen recording in progress...",
+                isRecording = true
             )
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 var foregroundServiceType =
@@ -139,7 +145,7 @@ class RecorderService : Service() {
             // Create output file
             outputFile = fileManager.createRecordingFile()
 
-            // Calculate dimensions based on orientation
+            // Calculate dimensions based on orientation & ensure even dimensions
             var width = settings.videoQuality.width
             var height = settings.videoQuality.height
 
@@ -152,6 +158,10 @@ class RecorderService : Service() {
             } else if (!isScreenPortrait && isSettingPortrait) {
                 val temp = width; width = height; height = temp
             }
+
+            // Hardware encoders require dimensions divisible by 2
+            width = (width / 2) * 2
+            height = (height / 2) * 2
 
             // Initialize video encoder
             val bitrate = settings.calculateBitrate()
@@ -209,6 +219,10 @@ class RecorderService : Service() {
 
             // Mark recording state and persist for QuickTile
             startTime = System.currentTimeMillis()
+            pausedDuration = 0
+            totalPauseDurationUs = 0L
+            lastVideoPtsUs = -1L
+            lastAudioPtsUs = -1L
             _recordingState.value = RecordingState.Recording(0)
             setTileRecordingState(true)
 
@@ -248,8 +262,9 @@ class RecorderService : Service() {
 
     /**
      * Recording loop — keeps running while Recording OR Paused.
-     * When paused: drains the encoder output and discards it (prevents buffer overflow)
+     * When paused: drains the encoder output and discards it to prevent buffer overflow
      *              without writing to the muxer, so the video is seamlessly resumed.
+     * Timestamps are adjusted to prevent playback gaps after pause/resume.
      */
     private suspend fun recordingLoop() {
         var videoTrackAdded = false
@@ -281,6 +296,14 @@ class RecorderService : Service() {
                         if (videoTrackAdded && !isPaused &&
                             (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0
                         ) {
+                            // Adjust presentation timestamp to exclude paused durations
+                            var adjustedPts = bufferInfo.presentationTimeUs - totalPauseDurationUs
+                            if (lastVideoPtsUs >= 0 && adjustedPts <= lastVideoPtsUs) {
+                                adjustedPts = lastVideoPtsUs + 1000L // Ensure strictly increasing
+                            }
+                            lastVideoPtsUs = adjustedPts
+                            bufferInfo.presentationTimeUs = adjustedPts
+
                             muxer?.writeVideoSample(buffer, bufferInfo)
                         }
                         videoEncoder?.releaseOutputBuffer(bufferIndex)
@@ -304,7 +327,7 @@ class RecorderService : Service() {
     }
 
     /**
-     * Audio loop — same pause logic as recordingLoop.
+     * Audio loop — same pause & timestamp adjustment logic as recordingLoop.
      */
     private suspend fun audioLoop() {
         var audioTrackAdded = false
@@ -346,9 +369,16 @@ class RecorderService : Service() {
                         val output = audioEncoder?.getEncodedData() ?: AudioEncoder.Output.TryAgain
                         when (output) {
                             is AudioEncoder.Output.Data -> {
-                                // Filter codec config frames — writing them as audio data corrupts the file
                                 val isConfig = (output.info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
                                 if (output.buffer != null && output.info.size > 0 && audioTrackAdded && !isConfig) {
+                                    // Adjust presentation timestamp to exclude paused durations
+                                    var adjustedPts = output.info.presentationTimeUs - totalPauseDurationUs
+                                    if (lastAudioPtsUs >= 0 && adjustedPts <= lastAudioPtsUs) {
+                                        adjustedPts = lastAudioPtsUs + 1000L
+                                    }
+                                    lastAudioPtsUs = adjustedPts
+                                    output.info.presentationTimeUs = adjustedPts
+
                                     muxer?.writeAudioSample(output.buffer, output.info)
                                 }
                                 audioEncoder?.releaseOutputBuffer(output.index)
@@ -390,7 +420,7 @@ class RecorderService : Service() {
 
             val notification = notificationHelper.createRecordingNotification(
                 "Recording Paused",
-                "Tap to resume",
+                "Tap to resume or stop",
                 isRecording = false
             )
             notificationHelper.updateNotification(notification)
@@ -400,12 +430,16 @@ class RecorderService : Service() {
     private fun resumeRecording() {
         val currentState = _recordingState.value
         if (currentState is RecordingState.Paused) {
-            pausedDuration += System.currentTimeMillis() - pauseStartTime
+            val pauseDeltaMs = System.currentTimeMillis() - pauseStartTime
+            pausedDuration += pauseDeltaMs
+            totalPauseDurationUs += (pauseDeltaMs * 1000L)
+
             _recordingState.value = RecordingState.Recording(currentState.durationMs)
 
             val notification = notificationHelper.createRecordingNotification(
                 "Recording",
-                "Screen recording in progress..."
+                "Screen recording in progress...",
+                isRecording = true
             )
             notificationHelper.updateNotification(notification)
         }

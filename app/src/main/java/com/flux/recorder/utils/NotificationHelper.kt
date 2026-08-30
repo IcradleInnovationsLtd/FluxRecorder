@@ -9,29 +9,28 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.flux.recorder.MainActivity
 import com.flux.recorder.R
+import com.flux.recorder.service.RecorderService
 
 /**
- * Helper class for creating and managing notifications
+ * Helper class for creating and managing recording notifications with rich action buttons.
  */
 class NotificationHelper(private val context: Context) {
-    
-    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    
+
+    private val notificationManager =
+        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
     companion object {
         const val CHANNEL_ID = "recording_channel"
         const val NOTIFICATION_ID = 1001
-        
-        private const val CHANNEL_NAME = "Recording Service"
-        private const val CHANNEL_DESC = "Shows recording status"
+
+        private const val CHANNEL_NAME = "Screen Recording"
+        private const val CHANNEL_DESC = "Shows screen recording controls and status"
     }
-    
+
     init {
         createNotificationChannel()
     }
-    
-    /**
-     * Create notification channel for Android O+
-     */
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -45,47 +44,90 @@ class NotificationHelper(private val context: Context) {
             notificationManager.createNotificationChannel(channel)
         }
     }
-    
+
     /**
-     * Create recording notification
+     * Create recording notification with Pause/Resume and Stop action buttons.
      */
     fun createRecordingNotification(
         title: String,
         message: String,
         isRecording: Boolean = true
     ): android.app.Notification {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        val contentIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        
-        val pendingIntent = PendingIntent.getActivity(
+        val contentPendingIntent = PendingIntent.getActivity(
             context,
             0,
-            intent,
+            contentIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(message)
             .setSmallIcon(R.drawable.ic_record)
-            .setContentIntent(pendingIntent)
-            .setOngoing(isRecording)
+            .setContentIntent(contentPendingIntent)
+            .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .build()
+
+        // Action: Pause or Resume
+        if (isRecording) {
+            val pauseIntent = Intent(context, RecorderService::class.java).apply {
+                action = RecorderService.ACTION_PAUSE_RECORDING
+            }
+            val pausePendingIntent = PendingIntent.getService(
+                context,
+                101,
+                pauseIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            builder.addAction(
+                android.R.drawable.ic_media_pause,
+                "Pause",
+                pausePendingIntent
+            )
+        } else {
+            val resumeIntent = Intent(context, RecorderService::class.java).apply {
+                action = RecorderService.ACTION_RESUME_RECORDING
+            }
+            val resumePendingIntent = PendingIntent.getService(
+                context,
+                102,
+                resumeIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            builder.addAction(
+                android.R.drawable.ic_media_play,
+                "Resume",
+                resumePendingIntent
+            )
+        }
+
+        // Action: Stop
+        val stopIntent = Intent(context, RecorderService::class.java).apply {
+            action = RecorderService.ACTION_STOP_RECORDING
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            context,
+            103,
+            stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        builder.addAction(
+            android.R.drawable.ic_menu_close_clear_cancel,
+            "Stop",
+            stopPendingIntent
+        )
+
+        return builder.build()
     }
-    
-    /**
-     * Update notification
-     */
+
     fun updateNotification(notification: android.app.Notification) {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
-    
-    /**
-     * Cancel notification
-     */
+
     fun cancelNotification() {
         notificationManager.cancel(NOTIFICATION_ID)
     }
