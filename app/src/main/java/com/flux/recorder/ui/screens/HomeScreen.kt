@@ -5,25 +5,38 @@ import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.flux.recorder.data.RecordingSettings
 import com.flux.recorder.data.RecordingState
-import com.flux.recorder.service.RecorderService
 import com.flux.recorder.ui.theme.*
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
@@ -42,36 +55,30 @@ fun HomeScreen(
     autoStartRecording: Boolean = false
 ) {
     val context = LocalContext.current
-    
-    // Build list of required permissions based on Android version and settings
-    val requiredPermissions = buildList {
-        add(android.Manifest.permission.RECORD_AUDIO)
-        
-        // Camera permission if facecam is enabled
-        if (settings.enableFacecam) {
-            add(android.Manifest.permission.CAMERA)
-        }
-        
-        // Notification permission for Android 13+
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            add(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-        
-        // Storage permissions based on Android version
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            add(android.Manifest.permission.READ_MEDIA_VIDEO)
-        } else if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
-            add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+
+    // Required permissions
+    val requiredPermissions = remember(settings.enableFacecam) {
+        buildList {
+            add(android.Manifest.permission.RECORD_AUDIO)
+
+            if (settings.enableFacecam) {
+                add(android.Manifest.permission.CAMERA)
+            }
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                add(android.Manifest.permission.POST_NOTIFICATIONS)
+                add(android.Manifest.permission.READ_MEDIA_VIDEO)
+            } else if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
+                add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
         }
     }
-    
-    // Multi-permission state
+
     val multiplePermissionsState = rememberMultiplePermissionsState(
         permissions = requiredPermissions
     )
-    
-    // MediaProjection permission launcher (must be declared before LaunchedEffect)
+
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -79,24 +86,21 @@ fun HomeScreen(
             onStartRecording(result.resultCode, result.data!!)
         }
     }
-    
+
     // Auto-start recording if launched from Quick Tile
     LaunchedEffect(autoStartRecording) {
         if (autoStartRecording && recordingState is RecordingState.Idle) {
-            // Check permissions first
             if (multiplePermissionsState.allPermissionsGranted) {
-                // Permissions granted, request MediaProjection
-                val intent = (context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE) 
+                val intent = (context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                     as android.media.projection.MediaProjectionManager)
                     .createScreenCaptureIntent()
                 mediaProjectionLauncher.launch(intent)
             } else {
-                // Request permissions first
                 multiplePermissionsState.launchMultiplePermissionRequest()
             }
         }
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -109,10 +113,10 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(onClick = onNavigateToRecordings) {
-                        Icon(Icons.Default.VideoLibrary, "Recordings")
+                        Icon(Icons.Default.VideoLibrary, "Recordings", tint = TextPrimary)
                     }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, "Settings")
+                        Icon(Icons.Default.Settings, "Settings", tint = TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -127,90 +131,125 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Recording status
-            when (recordingState) {
-                is RecordingState.Idle -> {
-                    Text(
-                        "Ready to Record",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextSecondary
-                    )
-                }
-                is RecordingState.Recording -> {
-                    Text(
-                        "● Recording",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = RecordingRed,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        formatDuration(recordingState.durationMs),
-                        style = MaterialTheme.typography.displayMedium,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                is RecordingState.Paused -> {
-                    Text(
-                        "⏸ Paused",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = WarningYellow
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        formatDuration(recordingState.durationMs),
-                        style = MaterialTheme.typography.displayMedium,
-                        color = TextPrimary
-                    )
-                }
-                is RecordingState.Processing -> {
-                    Text(
-                        "Processing...",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = FluxCyan
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    LinearProgressIndicator(
-                        progress = { recordingState.progress / 100f },
-                        modifier = Modifier.fillMaxWidth(0.6f),
-                        color = FluxCyan
-                    )
-                }
-                is RecordingState.Error -> {
-                    Text(
-                        "Error",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = RecordingRed
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        recordingState.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    // Dismiss the error so the user can try again
-                    Button(onClick = onStopRecording) { Text("Dismiss") }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Recording status & timer
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                when (recordingState) {
+                    is RecordingState.Idle -> {
+                        Text(
+                            "Ready to Record",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = TextSecondary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    is RecordingState.Recording -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(RecordingRed)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "RECORDING",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = RecordingRed,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            formatDuration(recordingState.durationMs),
+                            style = MaterialTheme.typography.displayLarge,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    is RecordingState.Paused -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                "PAUSED",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = WarningYellow,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            formatDuration(recordingState.durationMs),
+                            style = MaterialTheme.typography.displayLarge,
+                            color = WarningYellow,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    is RecordingState.Processing -> {
+                        Text(
+                            "Saving recording...",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = FluxCyan
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LinearProgressIndicator(
+                            progress = { recordingState.progress / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth(0.6f)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = FluxCyan,
+                            trackColor = SurfaceBlack
+                        )
+                    }
+                    is RecordingState.Error -> {
+                        Text(
+                            "Error Occurred",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = RecordingRed,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            recordingState.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = onStopRecording,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = FluxCyan)
+                        ) {
+                            Text("Dismiss")
+                        }
+                    }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(48.dp))
-            
-            // Record button — shows STOP when recording or paused
-            val isActiveRecording = recordingState is RecordingState.Recording
-                    || recordingState is RecordingState.Paused
+
+            // Big Record / Stop Button with GPU graphicsLayer animation
+            val isActiveRecording = recordingState is RecordingState.Recording || recordingState is RecordingState.Paused
             RecordButton(
                 isRecording = isActiveRecording,
+                isPaused = recordingState is RecordingState.Paused,
                 onClick = {
                     when (recordingState) {
                         is RecordingState.Idle -> {
                             if (multiplePermissionsState.allPermissionsGranted) {
-                                val intent = (context.getSystemService(android.content.Context.MEDIA_PROJECTION_SERVICE)
+                                val intent = (context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
                                     as android.media.projection.MediaProjectionManager)
                                     .createScreenCaptureIntent()
                                 mediaProjectionLauncher.launch(intent)
@@ -218,20 +257,23 @@ fun HomeScreen(
                                 multiplePermissionsState.launchMultiplePermissionRequest()
                             }
                         }
-                        // Stop from either Recording or Paused state
                         else -> onStopRecording()
                     }
                 }
             )
-            
-            // Pause/Resume buttons when recording
-            if (recordingState is RecordingState.Recording || recordingState is RecordingState.Paused) {
-                Spacer(modifier = Modifier.height(24.dp))
+
+            // In-flight Control Buttons (Pause / Resume / Stop)
+            AnimatedVisibility(
+                visible = isActiveRecording,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut()
+            ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Pause/Resume button
-                    Button(
+                    // Pause/Resume Button
+                    FilledTonalButton(
                         onClick = {
                             if (recordingState is RecordingState.Recording) {
                                 onPauseRecording()
@@ -239,37 +281,44 @@ fun HomeScreen(
                                 onResumeRecording()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = FluxCyan
-                        )
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (recordingState is RecordingState.Paused) FluxCyan else SurfaceBlack,
+                            contentColor = if (recordingState is RecordingState.Paused) VoidBlack else TextPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
                     ) {
+                        Icon(
+                            imageVector = if (recordingState is RecordingState.Recording) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             text = if (recordingState is RecordingState.Recording) "Pause" else "Resume",
-                            style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    
-                    // Stop button
+
+                    // Stop Button
                     Button(
                         onClick = onStopRecording,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = RecordingRed
-                        )
+                            containerColor = RecordingRed,
+                            contentColor = TextPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
                     ) {
-                        Text(
-                            text = "Stop",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Icon(Icons.Default.Stop, null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Stop", fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(48.dp))
-            
-            // Settings summary
-            SettingsSummaryCard(settings)
+
+            // Clickable Settings Summary Card
+            SettingsSummaryCard(settings = settings, onClick = onNavigateToSettings)
+
+            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
@@ -277,68 +326,129 @@ fun HomeScreen(
 @Composable
 fun RecordButton(
     isRecording: Boolean,
+    isPaused: Boolean,
     onClick: () -> Unit
 ) {
+    // Pulse animation using GPU graphicsLayer for 60/120Hz zero-jank rendering
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
+    val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isRecording) 1.1f else 1f,
+        targetValue = if (isRecording && !isPaused) 1.08f else 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000),
+            animation = tween(900, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
-        label = "scale"
+        label = "pulseScale"
     )
-    
+
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = if (isRecording && !isPaused) 0.6f else 0.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
     Box(
-        modifier = Modifier.size(200.dp),
+        modifier = Modifier.size(210.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Gradient background
+        // Outer Glowing Pulse Ring
+        if (isRecording && !isPaused) {
+            Box(
+                modifier = Modifier
+                    .size(200.dp)
+                    .graphicsLayer {
+                        scaleX = pulseScale * 1.08f
+                        scaleY = pulseScale * 1.08f
+                        alpha = glowAlpha
+                    }
+                    .clip(CircleShape)
+                    .background(RecordingRed)
+            )
+        }
+
+        // Main Action Button
         Button(
             onClick = onClick,
             modifier = Modifier
-                .size(180.dp)
-                .scale(if (isRecording) scale else 1f),
+                .size(175.dp)
+                .graphicsLayer {
+                    scaleX = if (isRecording && !isPaused) pulseScale else 1f
+                    scaleY = if (isRecording && !isPaused) pulseScale else 1f
+                },
             shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (isRecording) RecordingRed else ElectricViolet
             ),
-            elevation = ButtonDefaults.buttonElevation(8.dp)
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 10.dp, pressedElevation = 4.dp)
         ) {
-            Text(
-                if (isRecording) "STOP" else "RECORD",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(36.dp),
+                    tint = TextPrimary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = if (isRecording) "STOP" else "RECORD",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.2.sp,
+                    color = TextPrimary
+                )
+            }
         }
     }
 }
 
 @Composable
-fun SettingsSummaryCard(settings: RecordingSettings) {
+fun SettingsSummaryCard(
+    settings: RecordingSettings,
+    onClick: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = SurfaceBlack
-        )
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = SurfaceBlack)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Text(
-                "Current Settings",
-                style = MaterialTheme.typography.titleMedium,
-                color = FluxCyan,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            SettingRow("Quality", settings.videoQuality.displayName)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Current Configuration",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = FluxCyan,
+                    fontWeight = FontWeight.Bold
+                )
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Edit settings",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+
+            SettingRow("Resolution", settings.videoQuality.displayName)
             SettingRow("Frame Rate", settings.frameRate.displayName)
-            SettingRow("Audio", settings.audioSource.displayName)
+            SettingRow("Audio Track", settings.audioSource.displayName)
             if (settings.enableFacecam) {
-                SettingRow("Facecam", "Enabled")
+                SettingRow("Facecam Overlay", "Active")
+            }
+            if (settings.enableShakeToStop) {
+                SettingRow("Shake to Stop", "Active (${String.format("%.1f", settings.shakeSensitivity)} m/s²)")
             }
         }
     }
@@ -349,17 +459,17 @@ fun SettingRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = TextSecondary
         )
         Text(
             value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = TextPrimary,
             fontWeight = FontWeight.SemiBold
         )
@@ -371,7 +481,7 @@ fun formatDuration(ms: Long): String {
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
-    
+
     return if (hours > 0) {
         String.format("%02d:%02d:%02d", hours, minutes, seconds)
     } else {

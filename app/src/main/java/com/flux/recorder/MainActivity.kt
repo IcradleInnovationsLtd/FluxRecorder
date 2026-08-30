@@ -9,6 +9,8 @@ import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -28,6 +30,9 @@ import com.flux.recorder.ui.theme.VoidBlack
 import com.flux.recorder.utils.FileManager
 import com.flux.recorder.utils.PreferencesManager
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -44,7 +49,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Check if launched from Quick Settings Tile
         val shouldStartRecording = intent?.action == QuickTileService.ACTION_TOGGLE_RECORDING
 
         setContent {
@@ -52,7 +56,6 @@ class MainActivity : ComponentActivity() {
             var autoStartRecording by remember { mutableStateOf(shouldStartRecording) }
             val context = LocalContext.current
 
-            // Bind to RecorderService so we can observe recording state reactively
             DisposableEffect(Unit) {
                 val connection = object : ServiceConnection {
                     override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -95,10 +98,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // -----------------------------------------------------------------------------------------
-    // Service control
-    // -----------------------------------------------------------------------------------------
-
     private fun startRecordingService(resultCode: Int, data: Intent, settings: RecordingSettings) {
         startService(Intent(this, RecorderService::class.java).apply {
             action = RecorderService.ACTION_START_RECORDING
@@ -125,10 +124,6 @@ class MainActivity : ComponentActivity() {
             action = RecorderService.ACTION_RESUME_RECORDING
         })
     }
-
-    // -----------------------------------------------------------------------------------------
-    // Play / Share — use content URI directly (works for both MediaStore and legacy)
-    // -----------------------------------------------------------------------------------------
 
     private fun playRecording(recording: Recording) {
         try {
@@ -158,10 +153,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// -------------------------------------------------------------------------------------------------
-// App-level composable
-// -------------------------------------------------------------------------------------------------
-
 @Composable
 fun FluxRecorderApp(
     preferencesManager: PreferencesManager,
@@ -175,48 +166,82 @@ fun FluxRecorderApp(
     onShareRecording: (Recording) -> Unit,
     autoStartRecording: Boolean = false
 ) {
+    val coroutineScope = rememberCoroutineScope()
     var currentScreen by remember { mutableStateOf("home") }
     var settings by remember { mutableStateOf(preferencesManager.getRecordingSettings()) }
-    var recordings by remember { mutableStateOf(fileManager.getAllRecordings()) }
+    var recordings by remember { mutableStateOf<List<Recording>>(emptyList()) }
 
-    when (currentScreen) {
-        "home" -> {
-            HomeScreen(
-                recordingState       = recordingState,
-                settings             = settings,
-                onStartRecording     = { resultCode, data -> onStartRecording(resultCode, data, settings) },
-                onStopRecording      = onStopRecording,
-                onPauseRecording     = onPauseRecording,
-                onResumeRecording    = onResumeRecording,
-                onNavigateToSettings = { currentScreen = "settings" },
-                onNavigateToRecordings = {
-                    recordings = fileManager.getAllRecordings()
-                    currentScreen = "recordings"
-                },
-                autoStartRecording   = autoStartRecording
-            )
+    // Load recordings asynchronously on IO dispatcher to avoid main thread UI hitching
+    val reloadRecordings: () -> Unit = {
+        coroutineScope.launch {
+            val list = withContext(Dispatchers.IO) {
+                fileManager.getAllRecordings()
+            }
+            recordings = list
         }
-        "settings" -> {
-            SettingsScreen(
-                settings         = settings,
-                onSettingsChanged = { newSettings ->
-                    settings = newSettings
-                    preferencesManager.saveRecordingSettings(newSettings)
-                },
-                onNavigateBack = { currentScreen = "home" }
-            )
+    }
+
+    LaunchedEffect(currentScreen) {
+        if (currentScreen == "recordings") {
+            reloadRecordings()
         }
-        "recordings" -> {
-            RecordingsScreen(
-                recordings       = recordings,
-                onNavigateBack   = { currentScreen = "home" },
-                onDeleteRecording = { recording ->
-                    fileManager.deleteRecording(recording)
-                    recordings = fileManager.getAllRecordings()
-                },
-                onShareRecording = onShareRecording,
-                onPlayRecording  = onPlayRecording
-            )
+    }
+
+    // Buttery smooth screen transitions
+    AnimatedContent(
+        targetState = currentScreen,
+        transitionSpec = {
+            if (targetState == "settings" || targetState == "recordings") {
+                (slideInHorizontally(animationSpec = tween(280)) { it / 3 } + fadeIn(animationSpec = tween(280)))
+                    .togetherWith(slideOutHorizontally(animationSpec = tween(280)) { -it / 3 } + fadeOut(animationSpec = tween(280)))
+            } else {
+                (slideInHorizontally(animationSpec = tween(280)) { -it / 3 } + fadeIn(animationSpec = tween(280)))
+                    .togetherWith(slideOutHorizontally(animationSpec = tween(280)) { it / 3 } + fadeOut(animationSpec = tween(280)))
+            }
+        },
+        label = "ScreenTransition"
+    ) { screen ->
+        when (screen) {
+            "home" -> {
+                HomeScreen(
+                    recordingState       = recordingState,
+                    settings             = settings,
+                    onStartRecording     = { resultCode, data -> onStartRecording(resultCode, data, settings) },
+                    onStopRecording      = onStopRecording,
+                    onPauseRecording     = onPauseRecording,
+                    onResumeRecording    = onResumeRecording,
+                    onNavigateToSettings = { currentScreen = "settings" },
+                    onNavigateToRecordings = { currentScreen = "recordings" },
+                    autoStartRecording   = autoStartRecording
+                )
+            }
+            "settings" -> {
+                SettingsScreen(
+                    settings         = settings,
+                    onSettingsChanged = { newSettings ->
+                        settings = newSettings
+                        preferencesManager.saveRecordingSettings(newSettings)
+                    },
+                    onNavigateBack = { currentScreen = "home" }
+                )
+            }
+            "recordings" -> {
+                RecordingsScreen(
+                    recordings       = recordings,
+                    onNavigateBack   = { currentScreen = "home" },
+                    onRefresh        = reloadRecordings,
+                    onDeleteRecording = { recording ->
+                        coroutineScope.launch {
+                            withContext(Dispatchers.IO) {
+                                fileManager.deleteRecording(recording)
+                            }
+                            reloadRecordings()
+                        }
+                    },
+                    onShareRecording = onShareRecording,
+                    onPlayRecording  = onPlayRecording
+                )
+            }
         }
     }
 }

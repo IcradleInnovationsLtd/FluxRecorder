@@ -31,31 +31,30 @@ class VideoEncoder(
      */
     fun prepare(): Surface? {
         try {
-            // Create MediaFormat
             val format = MediaFormat.createVideoFormat(MIME_TYPE, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, 
-                    MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL)
-                
-                // Enable VBR for efficiency
                 setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
-
-                // Repeat previous frame if no new frame is available (prevents freezing on static screens)
                 setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1000000L / frameRate)
             }
-            
-            // Create and configure encoder
-            mediaCodec = MediaCodec.createEncoderByType(MIME_TYPE).apply {
-                configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                inputSurface = createInputSurface()
-                start()
+
+            mediaCodec = MediaCodec.createEncoderByType(MIME_TYPE)
+            try {
+                mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            } catch (e: Exception) {
+                Log.w(TAG, "VBR configuration failed, falling back to default bitrate mode", e)
+                format.removeKey(MediaFormat.KEY_BITRATE_MODE)
+                mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             }
-            
+
+            inputSurface = mediaCodec?.createInputSurface()
+            mediaCodec?.start()
+
             Log.d(TAG, "Video encoder initialized: ${width}x${height} @ ${frameRate}fps, ${bitrate}bps")
             return inputSurface
-            
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize video encoder", e)
             release()

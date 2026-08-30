@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,7 +30,8 @@ fun RecordingsScreen(
     onNavigateBack: () -> Unit,
     onDeleteRecording: (Recording) -> Unit,
     onShareRecording: (Recording) -> Unit,
-    onPlayRecording: (Recording) -> Unit
+    onPlayRecording: (Recording) -> Unit,
+    onRefresh: (() -> Unit)? = null
 ) {
     var selectedVideoForPlayback by remember { mutableStateOf<Recording?>(null) }
 
@@ -56,6 +58,13 @@ fun RecordingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                    }
+                },
+                actions = {
+                    if (onRefresh != null) {
+                        IconButton(onClick = onRefresh) {
+                            Icon(Icons.Default.Refresh, "Refresh", tint = TextPrimary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -95,7 +104,10 @@ fun RecordingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(recordings, key = { it.id }) { recording ->
+                items(
+                    items = recordings,
+                    key = { it.contentUri?.toString() ?: it.fileUri?.toString() ?: it.displayName }
+                ) { recording ->
                     RecordingCard(
                         recording = recording,
                         onDelete  = { onDeleteRecording(recording) },
