@@ -307,7 +307,7 @@ fun UserManualScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "Flux Recorder • Complete Production Guide v1.2.0",
+                        "Flux Recorder • Complete Production Guide v1.2.1",
                         style = MaterialTheme.typography.labelMedium,
                         color = TextDisabled
                     )

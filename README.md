@@ -5,7 +5,7 @@
   
   ### Professional, High-Performance Screen Recording for Android
   
-  [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/IcradleInnovationsLtd/FluxRecorder/releases)
+  [![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/IcradleInnovationsLtd/FluxRecorder/releases)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
   [![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)](https://www.android.com)
   [![Min SDK](https://img.shields.io/badge/minSdk-24-orange.svg)](https://developer.android.com/about/versions/nougat)

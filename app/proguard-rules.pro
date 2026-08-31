@@ -1,6 +1,21 @@
-# Add project specific ProGuard rules here.
+# ===================================================================
+# Flux Recorder - Advanced R8 Optimization & ProGuard Configuration
+# ===================================================================
 
-# Suppress warnings for Netty's BlockHound integration
+# Aggressive optimizations: allow access modification & class repackaging
+-allowaccessmodification
+-repackageclasses 'com.flux.recorder.a'
+-optimizationpasses 5
+
+# Strip release debug logging to save bytecode, CPU, and memory
+-assumenosideeffects class android.util.Log {
+    public static boolean isLoggable(java.lang.String, int);
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+
+# Suppress warnings for Netty BlockHound
 -dontwarn reactor.blockhound.integration.BlockHoundIntegration
 
 # Keep Media3 Transformer, Effects, Codecs, and UI
@@ -14,10 +29,15 @@
 -keep class androidx.camera.** { *; }
 -dontwarn androidx.camera.**
 
-# Keep Hilt and Dagger
+# Keep Hilt & Application
 -keep class * extends dagger.hilt.internal.UnsafeCasts { *; }
 -keep class * extends com.flux.recorder.FluxRecorderApplication { *; }
+-keep class * extends android.app.Service { *; }
+-keep class * extends android.app.Activity { *; }
 
-# Keep data classes and Parcelables
--keep class com.flux.recorder.data.** { *; }
--keep class * implements android.os.Parcelable { *; }
+# Keep data models, Enums, and Parcelables
+-keepclassmembers enum * { *; }
+-keepclassmembers class com.flux.recorder.data.** { *; }
+-keep class * implements android.os.Parcelable {
+    public static final android.os.Parcelable$Creator *;
+}

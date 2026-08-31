@@ -505,7 +505,7 @@ fun SettingsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            "Flux Recorder v1.2.0 • Icradle Innovations Ltd",
+                            "Flux Recorder v1.2.1 • Icradle Innovations Ltd",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextDisabled
                         )
