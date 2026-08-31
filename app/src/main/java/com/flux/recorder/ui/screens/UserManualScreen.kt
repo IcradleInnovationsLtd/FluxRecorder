@@ -284,6 +284,22 @@ fun UserManualScreen(
                 )
             }
 
+            // Section 12: Privacy, Security & Terms of Service
+            item {
+                ManualSection(
+                    icon = Icons.Default.Lock,
+                    title = "12. Privacy, Security & Terms of Service",
+                    location = "Settings Screen (About & Legal)",
+                    description = "Transparent data practices and user ownership guarantees.",
+                    steps = listOf(
+                        "100% On-Device Processing: All screen recordings, microphone audio, and video trims remain strictly on your device.",
+                        "Zero Data Collection: Flux Recorder contains no tracking SDKs, analytics, or advertising libraries.",
+                        "Full Content Ownership: All recorded media files belong entirely to you and are stored in Movies/FluxRecorder.",
+                        "Access full Privacy Policy and Terms & Conditions directly from Settings > About & Legal."
+                    )
+                )
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(
@@ -291,7 +307,7 @@ fun UserManualScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "Flux Recorder • Complete Production Guide v1.0",
+                        "Flux Recorder • Complete Production Guide v1.1.0",
                         style = MaterialTheme.typography.labelMedium,
                         color = TextDisabled
                     )

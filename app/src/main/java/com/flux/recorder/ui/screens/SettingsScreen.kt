@@ -10,7 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Policy
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
@@ -34,7 +37,9 @@ fun SettingsScreen(
     settings: RecordingSettings,
     onSettingsChanged: (RecordingSettings) -> Unit,
     onNavigateBack: () -> Unit,
-    onNavigateToManual: () -> Unit = {}
+    onNavigateToManual: () -> Unit = {},
+    onNavigateToPrivacy: () -> Unit = {},
+    onNavigateToTerms: () -> Unit = {}
 ) {
     var currentSettings by remember { mutableStateOf(settings) }
     val context = LocalContext.current
@@ -432,6 +437,77 @@ fun SettingsScreen(
                             "Recordings are automatically saved to your device gallery under Movies.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
+                        )
+                    }
+                }
+            }
+
+            // Legal & Privacy Section
+            item {
+                SettingSection("About & Legal") {
+                    // Privacy Policy Item
+                    Surface(
+                        onClick = onNavigateToPrivacy,
+                        shape = RoundedCornerShape(10.dp),
+                        color = CardBlack,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Shield, contentDescription = null, tint = FluxCyan, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text("Privacy Policy", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                                    Text("100% on-device processing • Zero data collection", style = MaterialTheme.typography.bodySmall, color = TextSecondary, fontSize = 11.sp)
+                                }
+                            }
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextDisabled, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Terms & Conditions Item
+                    Surface(
+                        onClick = onNavigateToTerms,
+                        shape = RoundedCornerShape(10.dp),
+                        color = CardBlack,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Gavel, contentDescription = null, tint = FluxCyan, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Text("Terms & Conditions", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                                    Text("License terms, permissions & guidelines", style = MaterialTheme.typography.bodySmall, color = TextSecondary, fontSize = 11.sp)
+                                }
+                            }
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextDisabled, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Flux Recorder v1.1.0 • Icradle Innovations Ltd",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextDisabled
                         )
                     }
                 }

@@ -170,6 +170,7 @@ fun FluxRecorderApp(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var currentScreen by remember { mutableStateOf("home") }
+    var legalTab by remember { mutableIntStateOf(0) }
     var settings by remember { mutableStateOf(preferencesManager.getRecordingSettings()) }
     var recordings by remember { mutableStateOf<List<Recording>>(emptyList()) }
 
@@ -193,7 +194,7 @@ fun FluxRecorderApp(
     AnimatedContent(
         targetState = currentScreen,
         transitionSpec = {
-            if (targetState == "settings" || targetState == "recordings") {
+            if (targetState == "settings" || targetState == "recordings" || targetState == "legal") {
                 (slideInHorizontally(animationSpec = tween(280)) { it / 3 } + fadeIn(animationSpec = tween(280)))
                     .togetherWith(slideOutHorizontally(animationSpec = tween(280)) { -it / 3 } + fadeOut(animationSpec = tween(280)))
             } else {
@@ -230,7 +231,15 @@ fun FluxRecorderApp(
                         preferencesManager.saveRecordingSettings(newSettings)
                     },
                     onNavigateBack    = { currentScreen = "home" },
-                    onNavigateToManual = { currentScreen = "manual" }
+                    onNavigateToManual = { currentScreen = "manual" },
+                    onNavigateToPrivacy = {
+                        legalTab = 0
+                        currentScreen = "legal"
+                    },
+                    onNavigateToTerms = {
+                        legalTab = 1
+                        currentScreen = "legal"
+                    }
                 )
             }
             "recordings" -> {
@@ -253,6 +262,12 @@ fun FluxRecorderApp(
             "manual" -> {
                 com.flux.recorder.ui.screens.UserManualScreen(
                     onNavigateBack = { currentScreen = "home" }
+                )
+            }
+            "legal" -> {
+                com.flux.recorder.ui.screens.LegalScreen(
+                    initialTab = legalTab,
+                    onNavigateBack = { currentScreen = "settings" }
                 )
             }
         }
