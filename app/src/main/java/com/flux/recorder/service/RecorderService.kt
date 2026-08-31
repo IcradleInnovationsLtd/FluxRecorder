@@ -66,6 +66,7 @@ class RecorderService : Service() {
 
     // Screen touches state
     private var previousShowTouchesState: Boolean? = null
+    private var activeSettings: RecordingSettings? = null
 
     companion object {
         private const val TAG = "RecorderService"
@@ -92,16 +93,20 @@ class RecorderService : Service() {
                 serviceScope.launch(Dispatchers.IO) { stopRecording() }
             }
             onCapturedContentVisibilityChanged = { isVisible ->
-                if (isVisible) {
-                    if (_recordingState.value is RecordingState.Paused) {
-                        Log.d(TAG, "Target single app is visible again — auto-resuming recording")
-                        resumeRecording()
+                if (activeSettings?.autoPauseOnAppSwitch == true) {
+                    if (isVisible) {
+                        if (_recordingState.value is RecordingState.Paused) {
+                            Log.d(TAG, "Target single app is visible again — auto-resuming recording")
+                            resumeRecording()
+                        }
+                    } else {
+                        if (_recordingState.value is RecordingState.Recording) {
+                            Log.d(TAG, "Target single app went to background — auto-pausing recording")
+                            pauseRecording()
+                        }
                     }
                 } else {
-                    if (_recordingState.value is RecordingState.Recording) {
-                        Log.d(TAG, "Target single app went to background — auto-pausing recording to prevent black screen")
-                        pauseRecording()
-                    }
+                    Log.d(TAG, "Captured content visibility changed ($isVisible), continuous recording active")
                 }
             }
         }
@@ -148,6 +153,8 @@ class RecorderService : Service() {
             Log.w(TAG, "Recording already in progress")
             return
         }
+
+        activeSettings = settings
 
         try {
             // Start foreground service with notification

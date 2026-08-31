@@ -268,6 +268,22 @@ fun UserManualScreen(
                 )
             }
 
+            // Section 11: Recording Protected Content & Avoiding Black Screens
+            item {
+                ManualSection(
+                    icon = Icons.Default.Shield,
+                    title = "11. Protected Content & Avoiding Black Screens",
+                    location = "Android System Prompt & Settings Screen",
+                    description = "Master techniques to record games, video clips, and avoid app blackout restrictions.",
+                    steps = listOf(
+                        "Select 'Entire Screen': When Android displays the recording confirmation dialog, choose 'Entire screen' instead of 'A single app' to ensure recordings never freeze when switching apps.",
+                        "Disable 'Auto-Pause on App Switch' in Settings for continuous, uninterrupted recording.",
+                        "DRM Mini-Dramas & Copyright Protected Videos: Apps like TikTok Series, ReelShort, DramaBox, Netflix, and Banking apps use Android's FLAG_SECURE hardware protection.",
+                        "Pro Tip for Mini-Dramas: Open and watch the series in your mobile web browser (e.g. Chrome or Samsung Internet). Web browsers do not enforce FLAG_SECURE window locking, allowing complete video and audio capture."
+                    )
+                )
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(

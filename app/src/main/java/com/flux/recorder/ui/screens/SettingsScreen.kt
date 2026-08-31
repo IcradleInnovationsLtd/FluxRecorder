@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.flux.recorder.data.AudioSource
 import com.flux.recorder.data.FrameRate
 import com.flux.recorder.data.RecordingSettings
@@ -266,6 +267,46 @@ fun SettingsScreen(
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 4.dp)
                     )
+                }
+            }
+
+            // Unrestricted Recording & Anti-Black Screen Mode
+            item {
+                SettingSection("Unrestricted Recording & Anti-Black Screen") {
+                    SettingSwitchRow(
+                        label = "Auto-Pause on App Switch",
+                        checked = currentSettings.autoPauseOnAppSwitch,
+                        onCheckedChange = { enable ->
+                            currentSettings = currentSettings.copy(autoPauseOnAppSwitch = enable)
+                            onSettingsChanged(currentSettings)
+                        }
+                    )
+                    Text(
+                        "Keep Disabled (Recommended) to prevent screen recordings from freezing or pausing when switching between apps or opening overlays.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = CardBlack,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, null, tint = FluxCyan, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "DRM/Protected Videos Tip: To record protected mini-dramas or series without black screens, open and watch the video inside your mobile web browser (e.g. Chrome or Samsung Internet).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextPrimary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                 }
             }
 
