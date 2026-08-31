@@ -9,14 +9,14 @@ plugins {
 
 android {
     namespace = "com.flux.recorder"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.flux.recorder"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 4
-        versionName = "1.1.0"
+        targetSdk = 36
+        versionCode = 5
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
