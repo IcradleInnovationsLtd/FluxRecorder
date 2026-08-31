@@ -252,6 +252,22 @@ fun UserManualScreen(
                 )
             }
 
+            // Section 10: Show Screen Taps (Touch Indicator)
+            item {
+                ManualSection(
+                    icon = Icons.Default.TouchApp,
+                    title = "10. Show Screen Taps (Touch Indicator)",
+                    location = "Home Screen (Quick Configuration) & Settings Screen",
+                    description = "Visually renders circular touch dots on your screen for tutorials, demonstrations, and app walkthroughs.",
+                    steps = listOf(
+                        "Enable 'Show Screen Taps' in Settings or Quick Configuration on the Home Screen.",
+                        "Automatic Mode: Grant 'Modify system settings' permission to automatically turn touch circles ON when recording starts and OFF when recording stops.",
+                        "Developer Options Mode: Alternatively, tap 'Developer Options' and enable 'Show taps' under the Input section in Android settings.",
+                        "Touch dots are captured directly into your screen recordings."
+                    )
+                )
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
                 Box(

@@ -24,6 +24,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_SHAKE_TO_STOP = "shake_to_stop"
         private const val KEY_SHAKE_SENSITIVITY = "shake_sensitivity"
         private const val KEY_SHOW_FLOATING_CONTROLS = "show_floating_controls"
+        private const val KEY_SHOW_TOUCHES = "show_touches"
         
         private const val KEY_FIRST_LAUNCH = "first_launch"
     }
@@ -50,7 +51,8 @@ class PreferencesManager(context: Context) {
             shakeSensitivity      = prefs.getFloat(KEY_SHAKE_SENSITIVITY, 12.0f).let {
                 if (it < 6.0f) 12.0f else it
             },
-            showFloatingControls = prefs.getBoolean(KEY_SHOW_FLOATING_CONTROLS, true)
+            showFloatingControls = prefs.getBoolean(KEY_SHOW_FLOATING_CONTROLS, true),
+            showTouches          = prefs.getBoolean(KEY_SHOW_TOUCHES, false)
         )
     }
     
@@ -66,6 +68,7 @@ class PreferencesManager(context: Context) {
             putBoolean(KEY_SHAKE_TO_STOP, settings.enableShakeToStop)
             putFloat(KEY_SHAKE_SENSITIVITY, settings.shakeSensitivity)
             putBoolean(KEY_SHOW_FLOATING_CONTROLS, settings.showFloatingControls)
+            putBoolean(KEY_SHOW_TOUCHES, settings.showTouches)
             apply()
         }
     }

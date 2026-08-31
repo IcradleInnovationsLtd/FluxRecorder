@@ -105,6 +105,12 @@ class CameraOverlay(private val context: Context) {
                 override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
                     Log.d(TAG, "SurfaceTexture available: ${width}x$height, opening Camera2")
                     backgroundHandler?.post { openCamera() }
+                    // Fallback: Ensure container becomes visible even if camera sensor initialization is delayed
+                    mainHandler.postDelayed({
+                        if (!isFirstFrameRendered && overlayView != null) {
+                            container.animate().alpha(1.0f).setDuration(250).start()
+                        }
+                    }, 500)
                 }
 
                 override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) = Unit

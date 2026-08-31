@@ -17,6 +17,7 @@ import com.flux.recorder.data.RecordingState
 import com.flux.recorder.utils.FileManager
 import com.flux.recorder.utils.NotificationHelper
 import com.flux.recorder.utils.ShakeDetector
+import com.flux.recorder.utils.TouchHelper
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,6 +63,9 @@ class RecorderService : Service() {
     private var totalPauseDurationUs: Long = 0L
     private var lastVideoPtsUs: Long = -1L
     private var lastAudioPtsUs: Long = -1L
+
+    // Screen touches state
+    private var previousShowTouchesState: Boolean? = null
 
     companion object {
         private const val TAG = "RecorderService"
@@ -155,15 +159,37 @@ class RecorderService : Service() {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 var foregroundServiceType =
                     android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    foregroundServiceType =
-                        foregroundServiceType or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    if (settings.audioSource != AudioSource.NONE &&
+                        com.flux.recorder.utils.PermissionManager.hasAudioPermission(this)) {
+                        foregroundServiceType =
+                            foregroundServiceType or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                    }
                 }
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    foregroundServiceType =
-                        foregroundServiceType or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    if (settings.enableFacecam &&
+                        com.flux.recorder.utils.PermissionManager.hasCameraPermission(this)) {
+                        foregroundServiceType =
+                            foregroundServiceType or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    }
                 }
-                startForeground(NotificationHelper.NOTIFICATION_ID, notification, foregroundServiceType)
+
+                try {
+                    startForeground(NotificationHelper.NOTIFICATION_ID, notification, foregroundServiceType)
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "Failed to start FGS with type $foregroundServiceType, falling back to MEDIA_PROJECTION", e)
+                    try {
+                        startForeground(
+                            NotificationHelper.NOTIFICATION_ID,
+                            notification,
+                            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        )
+                    } catch (fallbackEx: Exception) {
+                        Log.e(TAG, "Fatal fallback startForeground error", fallbackEx)
+                        startForeground(NotificationHelper.NOTIFICATION_ID, notification)
+                    }
+                }
             } else {
                 startForeground(NotificationHelper.NOTIFICATION_ID, notification)
             }
@@ -297,6 +323,17 @@ class RecorderService : Service() {
                 }
                 shakeDetector?.start()
                 Log.d(TAG, "Shake-to-stop enabled with sensitivity: ${settings.shakeSensitivity}")
+            }
+
+            // Handle show touches if enabled
+            if (settings.showTouches) {
+                if (TouchHelper.canWriteSettings(this)) {
+                    previousShowTouchesState = TouchHelper.isSystemShowTouchesEnabled(this)
+                    TouchHelper.setShowTouches(this, true)
+                    Log.d(TAG, "Native show touches enabled for recording")
+                } else {
+                    Log.d(TAG, "showTouches enabled in settings but WRITE_SETTINGS permission not granted")
+                }
             }
 
         } catch (e: Exception) {
@@ -569,6 +606,13 @@ class RecorderService : Service() {
 
         // Clear the tile state
         setTileRecordingState(false)
+
+        // Restore previous touch state if changed
+        previousShowTouchesState?.let { wasEnabled ->
+            TouchHelper.setShowTouches(this, wasEnabled)
+            previousShowTouchesState = null
+            Log.d(TAG, "Restored previous show_touches state: $wasEnabled")
+        }
 
         // Stop floating overlay
         stopService(Intent(this, FloatingControlService::class.java))

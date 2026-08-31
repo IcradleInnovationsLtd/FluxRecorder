@@ -3,6 +3,10 @@ package com.flux.recorder.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import com.flux.recorder.utils.TouchHelper
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -57,6 +61,59 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var isPreviewActive by remember { mutableStateOf(false) }
+    var showTouchPermissionDialog by remember { mutableStateOf(false) }
+
+    // Dialog explaining how to grant touch permissions / open Developer Options
+    if (showTouchPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showTouchPermissionDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.TouchApp, contentDescription = null, tint = FluxCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Show Screen Taps", color = TextPrimary)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "To automatically show visual touch circles during recordings and hide them when finished, Flux Recorder requires permission to modify system settings.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "You can also enable 'Show taps' directly in Android Developer Options.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextDisabled
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showTouchPermissionDialog = false
+                        TouchHelper.openWriteSettings(context)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = FluxCyan, contentColor = VoidBlack)
+                ) {
+                    Text("Grant Permission", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showTouchPermissionDialog = false
+                        TouchHelper.openDeveloperSettings(context)
+                    }
+                ) {
+                    Text("Developer Options", color = FluxCyan)
+                }
+            },
+            containerColor = SurfaceBlack,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 
     // Required permissions via PermissionManager
     val requiredPermissions = remember(settings.enableFacecam) {
@@ -364,13 +421,23 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Facecam Pre-recording Preview Button
+                // Facecam Pre-recording Preview Button (Modern prominent Material 3 button)
                 if (!isActiveRecording) {
-                    Surface(
+                    Button(
                         onClick = {
-                            if (!PermissionManager.hasCameraPermission(context) || !PermissionManager.hasOverlayPermission(context)) {
+                            if (!PermissionManager.hasCameraPermission(context)) {
                                 multiplePermissionsState.launchMultiplePermissionRequest()
-                                return@Surface
+                                return@Button
+                            }
+                            if (!PermissionManager.hasOverlayPermission(context)) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    context.startActivity(intent)
+                                }
+                                return@Button
                             }
                             isPreviewActive = !isPreviewActive
                             val intent = Intent(context, FloatingControlService::class.java).apply {
@@ -382,35 +449,32 @@ fun HomeScreen(
                             }
                             context.startService(intent)
                         },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isPreviewActive) RecordingRed.copy(alpha = 0.2f) else CardBlack,
+                            contentColor = if (isPreviewActive) RecordingRed else FluxCyan
+                        ),
                         shape = RoundedCornerShape(14.dp),
-                        color = if (isPreviewActive) FluxCyanDark.copy(alpha = 0.25f) else SurfaceBlack,
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
-                            if (isPreviewActive) FluxCyan else CardBlack
+                            if (isPreviewActive) RecordingRed else FluxCyan.copy(alpha = 0.6f)
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = if (isPreviewActive) Icons.Default.VideocamOff else Icons.Default.Videocam,
-                                contentDescription = null,
-                                tint = if (isPreviewActive) FluxCyan else TextPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = if (isPreviewActive) "Close Facecam Preview" else "Preview & Position Facecam",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isPreviewActive) FluxCyan else TextPrimary
-                            )
-                        }
+                        Icon(
+                            imageVector = if (isPreviewActive) Icons.Default.VideocamOff else Icons.Default.Videocam,
+                            contentDescription = null,
+                            tint = if (isPreviewActive) RecordingRed else FluxCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = if (isPreviewActive) "Close Facecam Preview" else "Preview & Position Facecam",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isPreviewActive) RecordingRed else TextPrimary
+                        )
                     }
                 }
 
@@ -418,10 +482,23 @@ fun HomeScreen(
                 SettingsSummaryCard(
                     settings = settings,
                     onToggleFacecam = { enabled ->
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
                         onSettingsChanged(settings.copy(enableFacecam = enabled))
                     },
                     onToggleShake = { enabled ->
                         onSettingsChanged(settings.copy(enableShakeToStop = enabled))
+                    },
+                    onToggleTouches = { enabled ->
+                        if (enabled && !TouchHelper.canWriteSettings(context)) {
+                            showTouchPermissionDialog = true
+                        }
+                        onSettingsChanged(settings.copy(showTouches = enabled))
                     },
                     onClick = onNavigateToSettings
                 )
@@ -552,6 +629,7 @@ fun SettingsSummaryCard(
     settings: RecordingSettings,
     onToggleFacecam: (Boolean) -> Unit,
     onToggleShake: (Boolean) -> Unit,
+    onToggleTouches: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
     Card(
@@ -603,21 +681,27 @@ fun SettingsSummaryCard(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Videocam, null, tint = FluxCyan, modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = null,
+                            tint = FluxCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
                         Column {
-                            Text("Resolution", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
+                            Text("RESOLUTION", style = MaterialTheme.typography.labelSmall, color = TextDisabled, fontSize = 9.sp)
                             Text(
-                                "${settings.videoQuality.displayName} @ ${settings.frameRate.displayName}",
+                                "${settings.videoQuality.displayName.split(" ")[0]} @ ${settings.frameRate.fps} FPS",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TextPrimary,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
                             )
                         }
                     }
                 }
 
-                // Audio Badge
+                // Audio Source Badge
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = CardBlack,
@@ -627,15 +711,21 @@ fun SettingsSummaryCard(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Mic, null, tint = ElectricViolet, modifier = Modifier.size(16.dp))
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = FluxCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Spacer(Modifier.width(6.dp))
                         Column {
-                            Text("Audio Source", style = MaterialTheme.typography.labelSmall, color = TextSecondary, fontSize = 10.sp)
+                            Text("AUDIO", style = MaterialTheme.typography.labelSmall, color = TextDisabled, fontSize = 9.sp)
                             Text(
                                 settings.audioSource.displayName,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TextPrimary,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
                             )
                         }
                     }
@@ -695,6 +785,29 @@ fun SettingsSummaryCard(
                         )
                     }
                 }
+            }
+
+            // Screen Touches Switch
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.TouchApp, null, tint = FluxCyan, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Show Screen Taps", style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                }
+                Switch(
+                    checked = settings.showTouches,
+                    onCheckedChange = onToggleTouches,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = FluxCyan,
+                        checkedTrackColor = FluxCyanDark,
+                        uncheckedTrackColor = CardBlack
+                    ),
+                    modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f }
+                )
             }
 
             // Shake to Stop Switch
